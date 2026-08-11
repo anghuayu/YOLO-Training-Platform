@@ -1,0 +1,569 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title data-i18n="modelsTitle">模型管理</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <div id="sidebar-container"></div>
+
+    <div class="main-content">
+        <div class="page-header">
+            <div>
+                <h1 data-i18n="modelsTitle">模型管理</h1>
+                <div class="subtitle" data-i18n="modelsSub">管理、导出和下载训练好的模型</div>
+            </div>
+        </div>
+
+        <div class="page-body">
+            <div id="models-container" class="grid-3">
+                <div class="empty-state" style="grid-column: 1/-1;">
+                    <i class="fas fa-spinner fa-spin"></i>
+                    <p data-i18n="loading">加载中...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Export Modal -->
+    <div id="export-modal" class="modal-overlay">
+        <div class="modal">
+            <div class="modal-header">
+                <h3 data-i18n="exportModel">导出模型</h3>
+                <button class="modal-close" onclick="closeModal('export-modal')">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div id="export-model-info" style="margin-bottom: 20px;"></div>
+                <div class="form-group">
+                    <label data-i18n="exportFormat">导出格式</label>
+                    <select id="export-format" class="form-control">
+                        <option value="onnx">ONNX</option>
+                        <option value="torchscript">TorchScript</option>
+                        <option value="tensorflow">TensorFlow</option>
+                        <option value="openvino">OpenVINO</option>
+                        <option value="tensorrt">TensorRT</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label data-i18n="exportImgSize">图片尺寸</label>
+                    <select id="export-imgsz" class="form-control">
+                        <option value="320">320</option>
+                        <option value="416">416</option>
+                        <option value="512">512</option>
+                        <option value="640" selected>640</option>
+                        <option value="800">800</option>
+                        <option value="1024">1024</option>
+                        <option value="1280">1280</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="export-half">
+                        <span data-i18n="halfPrecision">半精度 (FP16)</span>
+                    </label>
+                </div>
+                <div class="form-group">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="export-simplify">
+                        <span data-i18n="simplifyModel">简化模型</span>
+                    </label>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-outline" onclick="closeModal('export-modal')">
+                    <span data-i18n="cancel">取消</span>
+                </button>
+                <button class="btn btn-primary" id="export-confirm-btn" onclick="exportModel()">
+                    <i class="fas fa-file-export"></i>
+                    <span data-i18n="exportModel">导出模型</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Edit Modal -->
+    <div id="edit-modal" class="modal-overlay">
+        <div class="modal">
+            <div class="modal-header">
+                <h3 data-i18n="editModel">编辑模型</h3>
+                <button class="modal-close" onclick="closeModal('edit-modal')">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label data-i18n="editName">模型名称</label>
+                    <input type="text" id="edit-name" class="form-control">
+                </div>
+                <div class="form-group">
+                    <label data-i18n="editDesc">描述</label>
+                    <textarea id="edit-desc" class="form-control" rows="4"></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-outline" onclick="closeModal('edit-modal')">
+                    <span data-i18n="cancel">取消</span>
+                </button>
+                <button class="btn btn-primary" onclick="saveModelEdit()">
+                    <span data-i18n="confirm">确定</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/js/app.js"></script>
+    <script>
+        // Initialize sidebar
+        document.getElementById('sidebar-container').innerHTML = getSidebarHTML('models');
+
+        let models = [];
+        let currentExportModelId = null;
+        let currentEditModelId = null;
+        let expandedExports = {};
+
+        // Load models
+        async function loadModels() {
+            try {
+                models = await API.get('/api/models');
+                renderModels();
+            } catch (error) {
+                console.error('Failed to load models:', error);
+                showToast(t('error') + ': ' + error.message, 'error');
+            }
+        }
+
+        // Render models grid
+        function renderModels() {
+            const container = document.getElementById('models-container');
+
+            if (!models || models.length === 0) {
+                container.innerHTML = `
+                    <div class="empty-state" style="grid-column: 1/-1;">
+                        <i class="fas fa-inbox"></i>
+                        <h3 data-i18n="noModels">${t('noModels')}</h3>
+                        <p data-i18n="noModelsDesc">${t('noModelsDesc')}</p>
+                    </div>
+                `;
+                return;
+            }
+
+            const html = models.map(model => {
+                const metrics = model.metrics || {};
+                const map5095 = formatMetric(metrics.map50_95);
+                const precision = formatMetric(metrics.precision);
+                const recall = formatMetric(metrics.recall);
+                const fileSize = model.size_mb ? (model.size_mb.toFixed(2) + ' MB') : '-';
+                const fileName = model.filename || model.file_name || '-';
+                const datasetName = model.dataset_name || ('#' + (model.dataset_id || '-'));
+                const modelType = model.model_type || '-';
+
+                const exportsSection = expandedExports[model.id] ? `
+                    <div class="exports-section" id="exports-${model.id}">
+                        <div class="exports-header">
+                            <i class="fas fa-folder-open"></i>
+                            <span data-i18n="exportedFiles">${t('exportedFiles')}</span>
+                        </div>
+                        <div class="exports-list" id="exports-list-${model.id}">
+                            <div style="padding: 12px; text-align: center; color: var(--text-secondary); font-size: 13px;">
+                                <i class="fas fa-spinner fa-spin"></i> ${t('loading')}
+                            </div>
+                        </div>
+                    </div>
+                ` : '';
+
+                return `
+                    <div class="card">
+                        <div class="card-body">
+                            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+                                <h3 style="font-size: 16px; font-weight: 600;">${model.name || '-'}</h3>
+                                <span class="badge badge-primary">${modelType}</span>
+                            </div>
+                            <p style="font-size: 13px; color: var(--text-secondary); margin-bottom: 16px; min-height: 36px;">
+                                ${model.description || t('noDesc')}
+                            </p>
+
+                            <div style="display: flex; gap: 16px; margin-bottom: 12px; font-size: 13px;">
+                                <div>
+                                    <div style="color: var(--text-secondary); font-size: 11px;">mAP@50:95</div>
+                                    <div style="font-weight: 600; font-size: 15px;">${map5095}</div>
+                                </div>
+                                <div>
+                                    <div style="color: var(--text-secondary); font-size: 11px;">Precision</div>
+                                    <div style="font-weight: 600; font-size: 15px;">${precision}</div>
+                                </div>
+                                <div>
+                                    <div style="color: var(--text-secondary); font-size: 11px;">Recall</div>
+                                    <div style="font-weight: 600; font-size: 15px;">${recall}</div>
+                                </div>
+                            </div>
+
+                            <div style="display: flex; gap: 16px; margin-bottom: 12px; font-size: 12px; color: var(--text-secondary);">
+                                <div>
+                                    <i class="fas fa-database" style="margin-right: 4px;"></i>${datasetName}
+                                </div>
+                                <div>
+                                    <i class="fas fa-calendar" style="margin-right: 4px;"></i>${formatDate(model.created_at)}
+                                </div>
+                            </div>
+
+                            <div style="display: flex; gap: 16px; margin-bottom: 16px; font-size: 12px; color: var(--text-secondary);">
+                                <div>
+                                    <i class="fas fa-file" style="margin-right: 4px;"></i>${fileName}
+                                </div>
+                                <div>
+                                    <i class="fas fa-weight-hanging" style="margin-right: 4px;"></i>${fileSize}
+                                </div>
+                            </div>
+
+                            <div style="display: flex; gap: 6px; flex-wrap: wrap;">
+                                <button class="btn btn-sm btn-outline" onclick="openExportModal('${model.id}')">
+                                    <i class="fas fa-file-export"></i>
+                                    <span data-i18n="exportModel">${t('exportModel')}</span>
+                                </button>
+                                <button class="btn btn-sm btn-primary" onclick="downloadModel('${model.id}')">
+                                    <i class="fas fa-download"></i>
+                                    <span data-i18n="download">${t('download')}</span>
+                                </button>
+                                <button class="btn btn-sm btn-outline" onclick="openEditModal('${model.id}')">
+                                    <i class="fas fa-edit"></i>
+                                    <span data-i18n="editModel">${t('editModel')}</span>
+                                </button>
+                                <button class="btn btn-sm btn-outline" onclick="toggleExports('${model.id}')">
+                                    <i class="fas fa-folder-open"></i>
+                                    <span data-i18n="exportedFiles">${t('exportedFiles')}</span>
+                                </button>
+                                <button class="btn btn-sm btn-danger" onclick="deleteModel('${model.id}', '${(model.name || '').replace(/'/g, "\\'")}')">
+                                    <i class="fas fa-trash"></i>
+                                    <span data-i18n="delete">${t('delete')}</span>
+                                </button>
+                            </div>
+                        </div>
+                        ${exportsSection}
+                    </div>
+                `;
+            }).join('');
+
+            container.innerHTML = html;
+
+            // Load exports for expanded sections
+            Object.keys(expandedExports).forEach(modelId => {
+                if (expandedExports[modelId]) {
+                    loadExportedFiles(modelId);
+                }
+            });
+        }
+
+        function formatMetric(val) {
+            if (val === undefined || val === null) return '-';
+            return (typeof val === 'number') ? val.toFixed(4) : val;
+        }
+
+        // ============================================
+        // Export Model
+        // ============================================
+        function openExportModal(modelId) {
+            currentExportModelId = modelId;
+            const model = models.find(m => m.id === modelId);
+            if (!model) return;
+
+            const info = document.getElementById('export-model-info');
+            info.innerHTML = `
+                <div style="padding: 12px; background: var(--bg); border-radius: var(--radius); font-size: 13px;">
+                    <strong>${model.name || '-'}</strong>
+                    <span class="badge badge-primary" style="margin-left: 8px;">${model.model_type || '-'}</span>
+                </div>
+            `;
+
+            document.getElementById('export-format').value = 'onnx';
+            document.getElementById('export-imgsz').value = '640';
+            document.getElementById('export-half').checked = false;
+            document.getElementById('export-simplify').checked = false;
+
+            openModal('export-modal');
+        }
+
+        async function exportModel() {
+            if (!currentExportModelId) return;
+
+            const btn = document.getElementById('export-confirm-btn');
+            btn.disabled = true;
+
+            const payload = {
+                model_id: currentExportModelId,
+                format: document.getElementById('export-format').value,
+                imgsz: parseInt(document.getElementById('export-imgsz').value) || 640,
+                half: document.getElementById('export-half').checked,
+                simplify: document.getElementById('export-simplify').checked,
+            };
+
+            closeModal('export-modal');
+
+            showProgressOverlay(t('exporting'), t('exportModel') + '...');
+
+            // Simulate progress while waiting
+            let progress = 0;
+            const progressTimer = setInterval(() => {
+                progress = Math.min(progress + Math.random() * 15, 90);
+                updateProgressOverlay(progress, t('exporting') + ' ' + Math.round(progress) + '%');
+            }, 800);
+
+            try {
+                await API.post('/api/models/export', payload);
+                clearInterval(progressTimer);
+                updateProgressOverlay(100, t('exportSuccess'));
+                setTimeout(() => {
+                    hideProgressOverlay();
+                    showToast(t('exportSuccess'), 'success');
+                    // Auto-expand exports section for this model
+                    expandedExports[currentExportModelId] = true;
+                    renderModels();
+                }, 500);
+            } catch (error) {
+                clearInterval(progressTimer);
+                hideProgressOverlay();
+                console.error('Failed to export model:', error);
+                showToast(t('exportFailed') + ': ' + error.message, 'error');
+            } finally {
+                btn.disabled = false;
+            }
+        }
+
+        // ============================================
+        // Edit Model
+        // ============================================
+        function openEditModal(modelId) {
+            currentEditModelId = modelId;
+            const model = models.find(m => m.id === modelId);
+            if (!model) return;
+
+            document.getElementById('edit-name').value = model.name || '';
+            document.getElementById('edit-desc').value = model.description || '';
+
+            openModal('edit-modal');
+        }
+
+        async function saveModelEdit() {
+            if (!currentEditModelId) return;
+
+            const name = document.getElementById('edit-name').value.trim();
+            const description = document.getElementById('edit-desc').value.trim();
+
+            if (!name) {
+                showToast(t('editName') + '不能为空', 'warning');
+                return;
+            }
+
+            try {
+                await API.put('/api/models/' + currentEditModelId, { name, description });
+                showToast(t('modelUpdated'), 'success');
+                closeModal('edit-modal');
+                loadModels();
+            } catch (error) {
+                console.error('Failed to update model:', error);
+                showToast(t('error') + ': ' + error.message, 'error');
+            }
+        }
+
+        // ============================================
+        // Download Model
+        // ============================================
+        function downloadModel(modelId) {
+            window.open('/api/models/' + modelId + '/download', '_blank');
+        }
+
+        // ============================================
+        // Delete Model
+        // ============================================
+        async function deleteModel(modelId, name) {
+            const message = t('deleteModelConfirm').replace('{name}', name);
+            if (!await confirmAction(message)) return;
+
+            try {
+                await API.delete('/api/models/' + modelId);
+                showToast(t('modelDeleted'), 'success');
+                delete expandedExports[modelId];
+                loadModels();
+            } catch (error) {
+                console.error('Failed to delete model:', error);
+                showToast(t('error') + ': ' + error.message, 'error');
+            }
+        }
+
+        // ============================================
+        // Exported Files
+        // ============================================
+        function toggleExports(modelId) {
+            if (expandedExports[modelId]) {
+                delete expandedExports[modelId];
+                renderModels();
+            } else {
+                expandedExports[modelId] = true;
+                renderModels();
+            }
+        }
+
+        async function loadExportedFiles(modelId) {
+            const listEl = document.getElementById('exports-list-' + modelId);
+            if (!listEl) return;
+
+            try {
+                const files = await API.get('/api/models/exports/' + modelId);
+
+                if (!files || files.length === 0) {
+                    listEl.innerHTML = `
+                        <div style="padding: 12px; text-align: center; color: var(--text-secondary); font-size: 13px;">
+                            <i class="fas fa-inbox"></i> -
+                        </div>
+                    `;
+                    return;
+                }
+
+                const html = files.map(file => {
+                    const fileName = file.filename || file.name || '-';
+                    const fileSize = file.size ? formatSize(file.size) : '-';
+                    const downloadUrl = '/api/models/exports/' + modelId + '/' + encodeURIComponent(fileName);
+
+                    return `
+                        <div class="export-file-item">
+                            <div class="export-file-info">
+                                <i class="fas fa-file-archive" style="color: var(--primary); margin-right: 8px;"></i>
+                                <span class="export-file-name">${fileName}</span>
+                                <span class="export-file-size">${fileSize}</span>
+                            </div>
+                            <a href="${downloadUrl}" class="btn btn-sm btn-outline" download>
+                                <i class="fas fa-download"></i>
+                            </a>
+                        </div>
+                    `;
+                }).join('');
+
+                listEl.innerHTML = html;
+            } catch (error) {
+                console.error('Failed to load exported files:', error);
+                listEl.innerHTML = `
+                    <div style="padding: 12px; text-align: center; color: var(--danger); font-size: 13px;">
+                        <i class="fas fa-exclamation-circle"></i> ${t('error')}: ${error.message}
+                    </div>
+                `;
+            }
+        }
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            loadModels();
+        });
+    </script>
+
+    <style>
+        .card {
+            transition: var(--transition);
+        }
+
+        .card:hover {
+            transform: translateY(-4px);
+            box-shadow: var(--shadow-lg);
+        }
+
+        /* ============================================
+           Exported Files Section
+           ============================================ */
+        .exports-section {
+            border-top: 1px solid var(--border);
+            padding: 12px 16px 16px;
+        }
+
+        .exports-header {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--text-secondary);
+            margin-bottom: 10px;
+        }
+
+        .exports-header i {
+            color: var(--primary);
+        }
+
+        .exports-list {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .export-file-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 8px 12px;
+            border-radius: var(--radius);
+            border: 1px solid var(--border);
+            background: var(--bg);
+            transition: var(--transition);
+        }
+
+        .export-file-item:hover {
+            border-color: var(--primary);
+        }
+
+        .export-file-info {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            min-width: 0;
+            flex: 1;
+        }
+
+        .export-file-name {
+            font-size: 13px;
+            font-weight: 500;
+            color: var(--text);
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .export-file-size {
+            font-size: 12px;
+            color: var(--text-secondary);
+            margin-left: 8px;
+            flex-shrink: 0;
+        }
+
+        /* ============================================
+           Checkbox Label
+           ============================================ */
+        .checkbox-label {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+
+        .checkbox-label input[type="checkbox"] {
+            width: 16px;
+            height: 16px;
+            cursor: pointer;
+        }
+
+        @media (max-width: 1200px) {
+            .grid-3 {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+
+        @media (max-width: 768px) {
+            .grid-3 {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</body>
+</html>

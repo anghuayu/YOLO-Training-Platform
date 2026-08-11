@@ -1,0 +1,737 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title data-i18n="evalTitle">模型评估</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+</head>
+<body>
+    <div id="sidebar-container"></div>
+
+    <div class="main-content">
+        <div class="page-header">
+            <div>
+                <h1 data-i18n="evalTitle">模型评估</h1>
+                <div class="subtitle" data-i18n="evalSub">在数据集上评估模型性能</div>
+            </div>
+        </div>
+
+        <div class="page-body">
+            <!-- Evaluation Settings Card -->
+            <div class="card">
+                <div class="card-header">
+                    <h3><i class="fas fa-cogs" style="margin-right: 8px; color: var(--primary);"></i><span data-i18n="evalSettings">评估设置</span></h3>
+                </div>
+                <div class="card-body">
+                    <div class="eval-settings-grid">
+                        <!-- Model Select -->
+                        <div class="form-group">
+                            <label data-i18n="selectModel">选择模型</label>
+                            <select id="eval-model" class="form-control">
+                                <option value="" data-i18n="selectModel">选择预训练模型...</option>
+                            </select>
+                        </div>
+
+                        <!-- Dataset Select -->
+                        <div class="form-group">
+                            <label data-i18n="selectDataset">选择数据集</label>
+                            <select id="eval-dataset" class="form-control">
+                                <option value="" data-i18n="selectDataset">选择数据集...</option>
+                            </select>
+                        </div>
+
+                        <!-- Image Size -->
+                        <div class="form-group">
+                            <label data-i18n="imgSize">图片尺寸</label>
+                            <select id="eval-imgsz" class="form-control">
+                                <option value="320">320</option>
+                                <option value="640" selected>640</option>
+                                <option value="800">800</option>
+                                <option value="1024">1024</option>
+                            </select>
+                        </div>
+
+                        <!-- Confidence Threshold -->
+                        <div class="form-group">
+                            <label data-i18n="confidence">置信度阈值</label>
+                            <input type="number" id="eval-conf" class="form-control" value="0.25" min="0.01" max="1" step="0.05">
+                        </div>
+
+                        <!-- Device -->
+                        <div class="form-group">
+                            <label data-i18n="device">设备</label>
+                            <input type="text" id="eval-device" class="form-control" value="0" placeholder="0">
+                        </div>
+                    </div>
+
+                    <!-- Run Evaluation Button -->
+                    <button class="btn btn-primary btn-run-eval" id="run-eval-btn" onclick="runEvaluation()">
+                        <i class="fas fa-chart-bar"></i>
+                        <span data-i18n="runEval">开始评估</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Results Section (hidden until evaluation completes) -->
+            <div id="eval-results" style="display: none;">
+                <!-- Stat Cards -->
+                <div class="eval-stat-cards" id="eval-stat-cards">
+                    <div class="eval-stat-card">
+                        <div class="eval-stat-icon" style="color: var(--primary);">
+                            <i class="fas fa-bullseye"></i>
+                        </div>
+                        <div class="eval-stat-info">
+                            <div class="eval-stat-value" id="stat-map5095">-</div>
+                            <div class="eval-stat-label">mAP@50:95</div>
+                        </div>
+                    </div>
+                    <div class="eval-stat-card">
+                        <div class="eval-stat-icon" style="color: var(--success);">
+                            <i class="fas fa-crosshairs"></i>
+                        </div>
+                        <div class="eval-stat-info">
+                            <div class="eval-stat-value" id="stat-map50">-</div>
+                            <div class="eval-stat-label">mAP@50</div>
+                        </div>
+                    </div>
+                    <div class="eval-stat-card">
+                        <div class="eval-stat-icon" style="color: var(--warning);">
+                            <i class="fas fa-aiming"></i>
+                        </div>
+                        <div class="eval-stat-info">
+                            <div class="eval-stat-value" id="stat-map75">-</div>
+                            <div class="eval-stat-label">mAP@75</div>
+                        </div>
+                    </div>
+                    <div class="eval-stat-card">
+                        <div class="eval-stat-icon" style="color: var(--info);">
+                            <i class="fas fa-balance-scale"></i>
+                        </div>
+                        <div class="eval-stat-info">
+                            <div class="eval-stat-value" id="stat-pr">-</div>
+                            <div class="eval-stat-label">Precision / Recall</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Charts Row -->
+                <div class="eval-charts-row">
+                    <!-- Per-Class mAP@50 Bar Chart -->
+                    <div class="card">
+                        <div class="card-header">
+                            <h3><i class="fas fa-chart-bar" style="margin-right: 8px; color: var(--success);"></i><span data-i18n="perClassMap">各类别 mAP@50</span></h3>
+                        </div>
+                        <div class="card-body">
+                            <div style="position: relative; height: 360px;">
+                                <canvas id="perclass-bar-chart"></canvas>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Metrics Radar Chart -->
+                    <div class="card">
+                        <div class="card-header">
+                            <h3><i class="fas fa-chart-radar" style="margin-right: 8px; color: var(--primary);"></i><span data-i18n="metricsOverview">指标概览</span></h3>
+                        </div>
+                        <div class="card-body">
+                            <div style="position: relative; height: 360px;">
+                                <canvas id="metrics-radar-chart"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Per-Class Results Table -->
+                <div class="card">
+                    <div class="card-header">
+                        <h3><i class="fas fa-table" style="margin-right: 8px; color: var(--info);"></i><span data-i18n="perClassResults">各类别详细结果</span></h3>
+                    </div>
+                    <div class="card-body">
+                        <div class="eval-table-wrap">
+                            <table class="eval-table">
+                                <thead>
+                                    <tr>
+                                        <th data-i18n="classId">类别 ID</th>
+                                        <th data-i18n="className">类别名称</th>
+                                        <th>AP@50</th>
+                                        <th>AP@50:95</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="perclass-table-body">
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Evaluation History Placeholder -->
+            <div class="card" id="eval-history-card">
+                <div class="card-header">
+                    <h3><i class="fas fa-history" style="margin-right: 8px; color: var(--info);"></i><span data-i18n="evalHistory">评估历史</span></h3>
+                </div>
+                <div class="card-body">
+                    <div class="empty-state" id="eval-history-body">
+                        <i class="fas fa-inbox"></i>
+                        <p data-i18n="noEvalYet">运行评估后结果会显示在这里</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/js/app.js"></script>
+    <script>
+        // Initialize sidebar
+        document.getElementById('sidebar-container').innerHTML = getSidebarHTML('evaluate');
+
+        // State
+        let perClassBarChart = null;
+        let metricsRadarChart = null;
+
+        // ============================================
+        // Initialization
+        // ============================================
+        document.addEventListener('DOMContentLoaded', () => {
+            loadModels();
+            loadDatasets();
+        });
+
+        // ============================================
+        // Load Dropdown Data
+        // ============================================
+        async function loadModels() {
+            try {
+                const models = await API.get('/api/models');
+                const select = document.getElementById('eval-model');
+                select.innerHTML = '<option value="">' + t('selectModel') + '</option>';
+                if (Array.isArray(models)) {
+                    models.forEach(m => {
+                        const opt = document.createElement('option');
+                        opt.value = m.id;
+                        opt.textContent = m.name || m.model_type || ('Model #' + m.id);
+                        select.appendChild(opt);
+                    });
+                }
+            } catch (error) {
+                console.error('Failed to load models:', error);
+            }
+        }
+
+        async function loadDatasets() {
+            try {
+                const datasets = await API.get('/api/datasets');
+                const select = document.getElementById('eval-dataset');
+                select.innerHTML = '<option value="">' + t('selectDataset') + '</option>';
+                if (Array.isArray(datasets)) {
+                    datasets.forEach(ds => {
+                        const opt = document.createElement('option');
+                        opt.value = ds.id;
+                        opt.textContent = ds.name;
+                        select.appendChild(opt);
+                    });
+                }
+            } catch (error) {
+                console.error('Failed to load datasets:', error);
+            }
+        }
+
+        // ============================================
+        // Run Evaluation
+        // ============================================
+        async function runEvaluation() {
+            const modelId = document.getElementById('eval-model').value;
+            const datasetId = document.getElementById('eval-dataset').value;
+
+            if (!modelId) {
+                showToast(t('selectModelWarn'), 'warning');
+                return;
+            }
+            if (!datasetId) {
+                showToast(t('selectBothWarn'), 'warning');
+                return;
+            }
+
+            const payload = {
+                model_id: modelId,
+                dataset_id: datasetId,
+                imgsz: parseInt(document.getElementById('eval-imgsz').value) || 640,
+                conf: parseFloat(document.getElementById('eval-conf').value) || 0.25,
+                device: document.getElementById('eval-device').value || '0',
+            };
+
+            const btn = document.getElementById('run-eval-btn');
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> <span>' + t('evaluating') + '</span>';
+
+            // Show progress overlay
+            showProgressOverlay(t('evaluating'), t('evalTitle') + '...');
+
+            // Simulate progress while waiting
+            let progress = 0;
+            const progressTimer = setInterval(() => {
+                progress = Math.min(progress + Math.random() * 12, 90);
+                updateProgressOverlay(progress, t('evaluating') + ' ' + Math.round(progress) + '%');
+            }, 800);
+
+            try {
+                const result = await API.post('/api/models/evaluate', payload);
+                clearInterval(progressTimer);
+                updateProgressOverlay(100, t('evalComplete'));
+
+                setTimeout(() => {
+                    hideProgressOverlay();
+                    showToast(t('evalComplete'), 'success');
+                    renderResults(result);
+                }, 500);
+            } catch (error) {
+                clearInterval(progressTimer);
+                hideProgressOverlay();
+                console.error('Evaluation failed:', error);
+                showToast(t('evalFailed') + ': ' + error.message, 'error');
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fas fa-chart-bar"></i> <span data-i18n="runEval">' + t('runEval') + '</span>';
+            }
+        }
+
+        // ============================================
+        // Render Results
+        // ============================================
+        function renderResults(result) {
+            const resultsSection = document.getElementById('eval-results');
+            resultsSection.style.display = '';
+
+            const metrics = result.metrics || {};
+            const perClass = result.per_class || {};
+
+            // --- Stat Cards ---
+            document.getElementById('stat-map5095').textContent = formatMetric(metrics.map50_95);
+            document.getElementById('stat-map50').textContent = formatMetric(metrics.map50);
+            document.getElementById('stat-map75').textContent = formatMetric(metrics.map75);
+
+            const precStr = formatMetric(metrics.precision);
+            const recStr = formatMetric(metrics.recall);
+            document.getElementById('stat-pr').textContent = precStr + ' / ' + recStr;
+
+            // --- Per-Class Data ---
+            const classEntries = [];
+            Object.keys(perClass).forEach(key => {
+                const idMatch = key.match(/class_(\d+)/);
+                const classId = idMatch ? parseInt(idMatch[1]) : key;
+                const data = perClass[key];
+                classEntries.push({
+                    id: classId,
+                    name: 'Class ' + classId,
+                    ap50: data.ap50 != null ? data.ap50 : null,
+                    ap5095: data.ap5095 != null ? data.ap5095 : null,
+                });
+            });
+            classEntries.sort((a, b) => a.id - b.id);
+
+            // --- Bar Chart ---
+            renderPerClassBarChart(classEntries);
+
+            // --- Radar Chart ---
+            renderMetricsRadar(metrics);
+
+            // --- Table ---
+            renderPerClassTable(classEntries);
+        }
+
+        function formatMetric(val) {
+            if (val === undefined || val === null) return '-';
+            return (typeof val === 'number') ? val.toFixed(4) : val;
+        }
+
+        // ============================================
+        // Per-Class mAP@50 Bar Chart
+        // ============================================
+        function renderPerClassBarChart(classEntries) {
+            const canvas = document.getElementById('perclass-bar-chart');
+
+            if (perClassBarChart) {
+                perClassBarChart.destroy();
+                perClassBarChart = null;
+            }
+
+            const labels = classEntries.map(e => e.name);
+            const data = classEntries.map(e => e.ap50 != null ? parseFloat(e.ap50.toFixed(4)) : 0);
+
+            // Generate colors for each bar
+            const barColors = classEntries.map((_, i) => {
+                const hue = (i * 360 / Math.max(classEntries.length, 1)) % 360;
+                return 'hsla(' + hue + ', 70%, 55%, 0.75)';
+            });
+            const borderColors = classEntries.map((_, i) => {
+                const hue = (i * 360 / Math.max(classEntries.length, 1)) % 360;
+                return 'hsla(' + hue + ', 70%, 45%, 1)';
+            });
+
+            perClassBarChart = new Chart(canvas, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'AP@50',
+                        data: data,
+                        backgroundColor: barColors,
+                        borderColor: borderColors,
+                        borderWidth: 1,
+                        borderRadius: 4,
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: false,
+                        },
+                        tooltip: {
+                            backgroundColor: 'rgba(15,23,42,0.9)',
+                            titleFont: { size: 13 },
+                            bodyFont: { size: 12 },
+                            padding: 12,
+                            cornerRadius: 8,
+                            callbacks: {
+                                label: function(context) {
+                                    return 'AP@50: ' + context.parsed.y.toFixed(4);
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            grid: { display: false },
+                            ticks: { font: { size: 11 }, color: '#64748b', maxRotation: 45, minRotation: 0 },
+                        },
+                        y: {
+                            beginAtZero: true,
+                            max: 1,
+                            title: {
+                                display: true,
+                                text: 'AP@50',
+                                font: { size: 13, weight: '600' },
+                                color: '#64748b',
+                            },
+                            grid: { color: 'rgba(226,232,240,0.5)' },
+                            ticks: {
+                                font: { size: 11 },
+                                color: '#94a3b8',
+                                callback: function(value) { return value.toFixed(2); }
+                            },
+                        }
+                    }
+                }
+            });
+        }
+
+        // ============================================
+        // Metrics Radar Chart
+        // ============================================
+        function renderMetricsRadar(metrics) {
+            const canvas = document.getElementById('metrics-radar-chart');
+
+            if (metricsRadarChart) {
+                metricsRadarChart.destroy();
+                metricsRadarChart = null;
+            }
+
+            const labels = ['mAP@50:95', 'mAP@50', 'mAP@75', 'Precision', 'Recall'];
+            const values = [
+                metrics.map50_95 != null ? metrics.map50_95 : 0,
+                metrics.map50 != null ? metrics.map50 : 0,
+                metrics.map75 != null ? metrics.map75 : 0,
+                metrics.precision != null ? metrics.precision : 0,
+                metrics.recall != null ? metrics.recall : 0,
+            ];
+
+            metricsRadarChart = new Chart(canvas, {
+                type: 'radar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: t('evalTitle'),
+                        data: values,
+                        backgroundColor: 'rgba(59, 130, 246, 0.15)',
+                        borderColor: 'rgba(59, 130, 246, 0.8)',
+                        borderWidth: 2,
+                        pointBackgroundColor: 'rgba(59, 130, 246, 1)',
+                        pointBorderColor: '#fff',
+                        pointHoverBackgroundColor: '#fff',
+                        pointHoverBorderColor: 'rgba(59, 130, 246, 1)',
+                        pointRadius: 5,
+                        pointHoverRadius: 7,
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: false,
+                        },
+                        tooltip: {
+                            backgroundColor: 'rgba(15,23,42,0.9)',
+                            titleFont: { size: 13 },
+                            bodyFont: { size: 12 },
+                            padding: 12,
+                            cornerRadius: 8,
+                            callbacks: {
+                                label: function(context) {
+                                    return context.label + ': ' + context.parsed.r.toFixed(4);
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        r: {
+                            beginAtZero: true,
+                            max: 1,
+                            ticks: {
+                                stepSize: 0.2,
+                                font: { size: 10 },
+                                color: '#94a3b8',
+                                backdropColor: 'transparent',
+                                callback: function(value) { return value.toFixed(1); }
+                            },
+                            grid: { color: 'rgba(226,232,240,0.6)' },
+                            angleLines: { color: 'rgba(226,232,240,0.6)' },
+                            pointLabels: {
+                                font: { size: 12, weight: '600' },
+                                color: '#475569',
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // ============================================
+        // Per-Class Results Table
+        // ============================================
+        function renderPerClassTable(classEntries) {
+            const tbody = document.getElementById('perclass-table-body');
+
+            if (classEntries.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="4" style="text-align: center; color: var(--text-secondary); padding: 24px;">-</td></tr>';
+                return;
+            }
+
+            const html = classEntries.map(entry => {
+                const ap50 = entry.ap50 != null ? entry.ap50.toFixed(4) : '-';
+                const ap5095 = entry.ap5095 != null ? entry.ap5095.toFixed(4) : '-';
+
+                // Color-code AP values
+                const ap50Class = getApColorClass(entry.ap50);
+                const ap5095Class = getApColorClass(entry.ap5095);
+
+                return '<tr>' +
+                    '<td><span class="class-id-badge">' + entry.id + '</span></td>' +
+                    '<td style="font-weight: 500;">' + entry.name + '</td>' +
+                    '<td><span class="ap-value ' + ap50Class + '">' + ap50 + '</span></td>' +
+                    '<td><span class="ap-value ' + ap5095Class + '">' + ap5095 + '</span></td>' +
+                    '</tr>';
+            }).join('');
+
+            tbody.innerHTML = html;
+        }
+
+        function getApColorClass(val) {
+            if (val == null) return '';
+            if (val >= 0.7) return 'ap-high';
+            if (val >= 0.4) return 'ap-mid';
+            return 'ap-low';
+        }
+    </script>
+
+    <style>
+        /* ============================================
+           Evaluation Settings Grid
+           ============================================ */
+        .eval-settings-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 16px;
+        }
+
+        .eval-settings-grid .form-group {
+            margin-bottom: 0;
+        }
+
+        .btn-run-eval {
+            width: 100%;
+            margin-top: 20px;
+            padding: 14px 24px;
+            font-size: 15px;
+            font-weight: 600;
+            justify-content: center;
+        }
+
+        /* ============================================
+           Stat Cards
+           ============================================ */
+        .eval-stat-cards {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+
+        .eval-stat-card {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            padding: 20px;
+            background: var(--card-bg, #fff);
+            border-radius: var(--radius);
+            border: 1px solid var(--border);
+            transition: var(--transition);
+        }
+
+        .eval-stat-card:hover {
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-lg);
+        }
+
+        .eval-stat-icon {
+            width: 48px;
+            height: 48px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 12px;
+            background: var(--bg);
+            font-size: 20px;
+            flex-shrink: 0;
+        }
+
+        .eval-stat-info {
+            min-width: 0;
+        }
+
+        .eval-stat-value {
+            font-size: 22px;
+            font-weight: 800;
+            color: var(--text);
+            letter-spacing: -0.3px;
+            line-height: 1.2;
+        }
+
+        .eval-stat-label {
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
+            margin-top: 4px;
+        }
+
+        /* ============================================
+           Charts Row
+           ============================================ */
+        .eval-charts-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 24px;
+            margin-bottom: 24px;
+        }
+
+        /* ============================================
+           Per-Class Table
+           ============================================ */
+        .eval-table-wrap {
+            overflow-x: auto;
+        }
+
+        .eval-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 14px;
+        }
+
+        .eval-table thead th {
+            text-align: left;
+            padding: 12px 16px;
+            font-weight: 600;
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: var(--text-secondary);
+            border-bottom: 2px solid var(--border);
+            white-space: nowrap;
+        }
+
+        .eval-table tbody td {
+            padding: 12px 16px;
+            border-bottom: 1px solid var(--border);
+            color: var(--text);
+        }
+
+        .eval-table tbody tr:hover {
+            background: rgba(59, 130, 246, 0.02);
+        }
+
+        .eval-table tbody tr:last-child td {
+            border-bottom: none;
+        }
+
+        .class-id-badge {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 28px;
+            height: 28px;
+            border-radius: 8px;
+            background: var(--bg);
+            font-size: 12px;
+            font-weight: 700;
+            color: var(--primary);
+        }
+
+        .ap-value {
+            font-weight: 600;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .ap-high {
+            color: var(--success);
+        }
+
+        .ap-mid {
+            color: var(--warning);
+        }
+
+        .ap-low {
+            color: var(--danger);
+        }
+
+        /* ============================================
+           Responsive
+           ============================================ */
+        @media (max-width: 1200px) {
+            .eval-settings-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+
+            .eval-charts-row {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .eval-settings-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .eval-stat-cards {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+    </style>
+</body>
+</html>
