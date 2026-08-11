@@ -1,0 +1,944 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title data-i18n="trainingTitle">模型训练</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+</head>
+<body>
+    <div id="sidebar-container"></div>
+
+    <div class="main-content">
+        <div class="page-header">
+            <div>
+                <h1 data-i18n="trainingTitle">模型训练</h1>
+                <div class="subtitle" data-i18n="trainingSub">配置并启动训练任务</div>
+            </div>
+        </div>
+
+        <div class="page-body">
+            <div class="training-layout">
+                <!-- Left Column: Training Configuration -->
+                <div class="training-left">
+                    <div class="card">
+                        <div class="card-header">
+                            <h3><i class="fas fa-cogs" style="margin-right: 8px; color: var(--primary);"></i><span data-i18n="trainConfig">训练配置</span></h3>
+                        </div>
+                        <div class="card-body">
+                            <!-- Model Type -->
+                            <div class="form-group">
+                                <label data-i18n="modelType">模型类型</label>
+                                <select id="model-type" class="form-control">
+                                    <option value="" data-i18n="loading">加载中...</option>
+                                </select>
+                            </div>
+
+                            <!-- Dataset -->
+                            <div class="form-group">
+                                <label data-i18n="selectDataset">选择数据集</label>
+                                <select id="train-dataset" class="form-control">
+                                    <option value="" data-i18n="selectDataset">选择数据集...</option>
+                                </select>
+                            </div>
+
+                            <!-- Model Name -->
+                            <div class="form-group">
+                                <label data-i18n="modelName">模型名称</label>
+                                <input type="text" id="model-name" class="form-control" data-i18n-ph="modelNamePh" placeholder="留空自动生成">
+                            </div>
+
+                            <!-- Pretrained Model -->
+                            <div class="form-group">
+                                <label data-i18n="pretrained">预训练模型</label>
+                                <select id="pretrained-model" class="form-control">
+                                    <option value="" data-i18n="selectModel">选择预训练模型...</option>
+                                    <option value="__scratch__" data-i18n="trainFromScratch">从头训练 / 默认</option>
+                                </select>
+                            </div>
+
+                            <!-- Hyperparameters Divider -->
+                            <div class="hyperparams-divider">
+                                <i class="fas fa-sliders-h"></i>
+                                <span data-i18n="hyperparams">超参数设置</span>
+                            </div>
+
+                            <!-- Hyperparameters Grid -->
+                            <div class="hyperparams-grid">
+                                <div class="form-group">
+                                    <label data-i18n="epochsLabel">训练轮数</label>
+                                    <input type="number" id="epochs" class="form-control" value="100" min="1" max="10000">
+                                </div>
+                                <div class="form-group">
+                                    <label data-i18n="imgSize">图片尺寸</label>
+                                    <select id="img-size" class="form-control">
+                                        <option value="320">320</option>
+                                        <option value="416">416</option>
+                                        <option value="512">512</option>
+                                        <option value="640" selected>640</option>
+                                        <option value="800">800</option>
+                                        <option value="1024">1024</option>
+                                        <option value="1280">1280</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label data-i18n="batchSize">批量大小</label>
+                                    <input type="number" id="batch-size" class="form-control" value="16" min="1" max="256">
+                                </div>
+                                <div class="form-group">
+                                    <label data-i18n="learningRate">学习率</label>
+                                    <input type="number" id="learning-rate" class="form-control" value="0.01" min="0.0001" max="1" step="0.001">
+                                </div>
+                                <div class="form-group">
+                                    <label>
+                                        <span data-i18n="patience">早停耐心值</span>
+                                        <span class="label-hint" data-i18n="patienceHint">连续 N 轮无提升则停止</span>
+                                    </label>
+                                    <input type="number" id="patience" class="form-control" value="50" min="0" max="1000">
+                                </div>
+                                <div class="form-group">
+                                    <label data-i18n="optimizer">优化器</label>
+                                    <select id="optimizer" class="form-control">
+                                        <option value="auto" selected>auto</option>
+                                        <option value="SGD">SGD</option>
+                                        <option value="Adam">Adam</option>
+                                        <option value="AdamW">AdamW</option>
+                                        <option value="RMSProp">RMSProp</option>
+                                    </select>
+                                </div>
+                                <div class="form-group full-width">
+                                    <label>
+                                        <span data-i18n="device">设备</span>
+                                        <span class="label-hint" data-i18n="deviceHint">"0" 为第一张 GPU，"0,1" 多卡，"cpu" 用处理器</span>
+                                    </label>
+                                    <input type="text" id="device" class="form-control" value="0" placeholder="0">
+                                </div>
+                            </div>
+
+                            <!-- Start Button -->
+                            <button class="btn btn-success btn-start-train" id="start-train-btn" onclick="startTraining()">
+                                <i class="fas fa-play"></i>
+                                <span data-i18n="startTrain">开始训练</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Right Column -->
+                <div class="training-right">
+                    <!-- Active Training Card (hidden by default) -->
+                    <div class="card" id="active-training-card" style="display: none;">
+                        <div class="card-header">
+                            <h3>
+                                <i class="fas fa-bolt" style="margin-right: 8px; color: var(--warning);"></i>
+                                <span data-i18n="activeTraining">正在训练</span>
+                            </h3>
+                            <button class="btn btn-sm btn-danger" id="stop-train-btn" onclick="stopTraining()">
+                                <i class="fas fa-stop"></i>
+                                <span data-i18n="stop">停止</span>
+                            </button>
+                        </div>
+                        <div class="card-body">
+                            <div class="active-model-name" id="active-model-name">-</div>
+                            <div class="active-status" id="active-status-msg">
+                                <span class="badge badge-primary"><i class="fas fa-spinner fa-spin"></i> <span data-i18n="loading">加载中...</span></span>
+                            </div>
+                            <div class="active-progress-section">
+                                <div class="active-progress-bar">
+                                    <div class="progress-fill" id="active-progress-fill" style="width: 0%;"></div>
+                                </div>
+                                <div class="active-progress-info">
+                                    <span id="active-progress-pct">0%</span>
+                                    <span id="active-epoch-counter">0 / 0</span>
+                                </div>
+                            </div>
+                            <!-- Final Metrics (hidden until completed) -->
+                            <div class="active-metrics" id="active-metrics" style="display: none;">
+                                <div class="metric-box">
+                                    <div class="metric-value" id="metric-map5095">-</div>
+                                    <div class="metric-label">mAP@50:95</div>
+                                </div>
+                                <div class="metric-box">
+                                    <div class="metric-value" id="metric-map50">-</div>
+                                    <div class="metric-label">mAP@50</div>
+                                </div>
+                                <div class="metric-box">
+                                    <div class="metric-value" id="metric-precision">-</div>
+                                    <div class="metric-label" data-i18n="precision">Precision</div>
+                                </div>
+                                <div class="metric-box">
+                                    <div class="metric-value" id="metric-recall">-</div>
+                                    <div class="metric-label" data-i18n="recall">Recall</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Training History Card -->
+                    <div class="card">
+                        <div class="card-header">
+                            <h3><i class="fas fa-history" style="margin-right: 8px; color: var(--info);"></i><span data-i18n="trainingHistory">训练历史</span></h3>
+                            <button class="btn btn-sm btn-outline" onclick="loadTrainingHistory()">
+                                <i class="fas fa-sync-alt"></i>
+                            </button>
+                        </div>
+                        <div class="card-body" id="training-history-body">
+                            <div class="empty-state">
+                                <i class="fas fa-spinner fa-spin"></i>
+                                <p data-i18n="loading">加载中...</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Training Curves Card (full width, shown after training completes) -->
+            <div class="card" id="training-curves-card" style="display: none; margin-top: 24px;">
+                <div class="card-header">
+                    <h3><i class="fas fa-chart-line" style="margin-right: 8px; color: var(--success);"></i><span data-i18n="trainingCurves">训练曲线</span></h3>
+                </div>
+                <div class="card-body">
+                    <div style="position: relative; height: 360px;">
+                        <canvas id="training-curves-chart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/js/app.js"></script>
+    <script>
+        // Initialize sidebar
+        document.getElementById('sidebar-container').innerHTML = getSidebarHTML('train');
+
+        // State
+        let activePollTimer = null;
+        let curvesChart = null;
+
+        // ============================================
+        // Initialization
+        // ============================================
+        document.addEventListener('DOMContentLoaded', () => {
+            loadModelTypes();
+            loadDatasets();
+            loadModels();
+            loadTrainingHistory();
+            checkActiveTraining();
+        });
+
+        // ============================================
+        // Load Dropdown Data
+        // ============================================
+        async function loadModelTypes() {
+            try {
+                const data = await API.get('/api/models/types/available');
+                const types = data.types || data || [];
+                const select = document.getElementById('model-type');
+                select.innerHTML = '';
+                if (Array.isArray(types) && types.length > 0) {
+                    types.forEach(type => {
+                        const opt = document.createElement('option');
+                        opt.value = typeof type === 'string' ? type : type.id || type.name;
+                        opt.textContent = typeof type === 'string' ? type : type.name || type.id;
+                        select.appendChild(opt);
+                    });
+                }
+            } catch (error) {
+                console.error('Failed to load model types:', error);
+                const select = document.getElementById('model-type');
+                select.innerHTML = '<option value="yolov8n">yolov8n</option><option value="yolov8s">yolov8s</option><option value="yolov8m">yolov8m</option><option value="yolov8l">yolov8l</option><option value="yolov8x">yolov8x</option>';
+            }
+        }
+
+        async function loadDatasets() {
+            try {
+                const datasets = await API.get('/api/datasets');
+                const select = document.getElementById('train-dataset');
+                select.innerHTML = `<option value="">${t('selectDataset')}</option>`;
+                if (Array.isArray(datasets)) {
+                    datasets.forEach(ds => {
+                        const opt = document.createElement('option');
+                        opt.value = ds.id;
+                        opt.textContent = ds.name;
+                        select.appendChild(opt);
+                    });
+                }
+            } catch (error) {
+                console.error('Failed to load datasets:', error);
+            }
+        }
+
+        async function loadModels() {
+            try {
+                const models = await API.get('/api/models');
+                const select = document.getElementById('pretrained-model');
+                select.innerHTML = `<option value="">${t('selectModel')}</option><option value="__scratch__">${t('trainFromScratch')}</option>`;
+                if (Array.isArray(models)) {
+                    models.forEach(m => {
+                        const opt = document.createElement('option');
+                        opt.value = m.id;
+                        opt.textContent = m.name || m.model_type || ('Model #' + m.id);
+                        select.appendChild(opt);
+                    });
+                }
+            } catch (error) {
+                console.error('Failed to load models:', error);
+            }
+        }
+
+        // ============================================
+        // Start Training
+        // ============================================
+        async function startTraining() {
+            const datasetId = document.getElementById('train-dataset').value;
+            if (!datasetId) {
+                showToast(t('selectDatasetWarn'), 'warning');
+                return;
+            }
+
+            const payload = {
+                model_type: document.getElementById('model-type').value,
+                dataset_id: datasetId,
+                model_name: document.getElementById('model-name').value.trim() || '',
+                pretrained: (document.getElementById('pretrained-model').value && document.getElementById('pretrained-model').value !== '__scratch__') ? document.getElementById('pretrained-model').value : '',
+                epochs: parseInt(document.getElementById('epochs').value) || 100,
+                imgsz: parseInt(document.getElementById('img-size').value) || 640,
+                batch: parseInt(document.getElementById('batch-size').value) || 16,
+                lr0: parseFloat(document.getElementById('learning-rate').value) || 0.01,
+                patience: parseInt(document.getElementById('patience').value) || 50,
+                optimizer: document.getElementById('optimizer').value || 'auto',
+                device: document.getElementById('device').value || '0',
+            };
+
+            const btn = document.getElementById('start-train-btn');
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> <span>' + t('loading') + '</span>';
+
+            try {
+                await API.post('/api/training', payload);
+                showToast(t('trainingStarted'), 'success');
+                checkActiveTraining();
+                loadTrainingHistory();
+            } catch (error) {
+                console.error('Failed to start training:', error);
+                showToast(t('trainingFailed') + ': ' + error.message, 'error');
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fas fa-play"></i> <span data-i18n="startTrain">' + t('startTrain') + '</span>';
+            }
+        }
+
+        // ============================================
+        // Active Training Polling
+        // ============================================
+        async function checkActiveTraining() {
+            try {
+                const active = await API.get('/api/training/active');
+                if (active && active.id) {
+                    showActiveTraining(active);
+                    startPolling(active.id);
+                } else {
+                    hideActiveTraining();
+                }
+            } catch (error) {
+                // No active training (404 or similar)
+                hideActiveTraining();
+            }
+        }
+
+        function showActiveTraining(data) {
+            const card = document.getElementById('active-training-card');
+            card.style.display = '';
+            document.getElementById('active-model-name').textContent = data.model_name || data.model_type || '-';
+            updateActiveStatus(data);
+        }
+
+        function hideActiveTraining() {
+            stopPolling();
+            const card = document.getElementById('active-training-card');
+            card.style.display = 'none';
+            document.getElementById('active-metrics').style.display = 'none';
+        }
+
+        function updateActiveStatus(data) {
+            const statusEl = document.getElementById('active-status-msg');
+            const status = data.status || 'training';
+            const msg = data.message || '';
+            // Show badge + detailed message (e.g. "Epoch 5/100")
+            let badgeHtml = statusBadge(status);
+            if (msg && status === 'training') {
+                badgeHtml += ` <span style="margin-left:8px; color:var(--text-secondary); font-size:13px;">${msg}</span>`;
+            }
+            statusEl.innerHTML = badgeHtml;
+
+            // Progress
+            const progress = data.progress || 0;
+            const currentEpoch = data.epoch || data.current_epoch || 0;
+            const totalEpochs = data.total_epochs || 0;
+
+            document.getElementById('active-progress-fill').style.width = progress + '%';
+            document.getElementById('active-progress-pct').textContent = Math.round(progress) + '%';
+            document.getElementById('active-epoch-counter').textContent = currentEpoch + ' / ' + totalEpochs;
+
+            // Final metrics (shown when completed)
+            if (status === 'completed' && data.metrics) {
+                const metricsEl = document.getElementById('active-metrics');
+                metricsEl.style.display = '';
+                const m = data.metrics;
+                document.getElementById('metric-map5095').textContent = formatMetric(m.map50_95);
+                document.getElementById('metric-map50').textContent = formatMetric(m.map50);
+                document.getElementById('metric-precision').textContent = formatMetric(m.precision);
+                document.getElementById('metric-recall').textContent = formatMetric(m.recall);
+                showToast(t('trainingCompleted'), 'success');
+                stopPolling();
+                loadTrainingHistory();
+                // Load curves for this completed run
+                loadTrainingCurves(data.id);
+            } else if (status === 'error' || status === 'stopped') {
+                showToast(status === 'error' ? t('trainingFailed') : t('trainingStopped'), status === 'error' ? 'error' : 'warning');
+                stopPolling();
+                loadTrainingHistory();
+            }
+        }
+
+        function formatMetric(val) {
+            if (val === undefined || val === null) return '-';
+            return (typeof val === 'number') ? val.toFixed(4) : val;
+        }
+
+        function startPolling(runId) {
+            stopPolling();
+            activePollTimer = setInterval(async () => {
+                try {
+                    const data = await API.get('/api/training/' + runId);
+                    updateActiveStatus(data);
+                } catch (error) {
+                    console.error('Polling error:', error);
+                }
+            }, 3000);
+        }
+
+        function stopPolling() {
+            if (activePollTimer) {
+                clearInterval(activePollTimer);
+                activePollTimer = null;
+            }
+        }
+
+        // ============================================
+        // Stop Training
+        // ============================================
+        async function stopTraining() {
+            if (!await confirmAction(t('stopConfirm'))) return;
+
+            try {
+                const active = await API.get('/api/training/active');
+                if (active && active.id) {
+                    await API.post('/api/training/' + active.id + '/stop');
+                    showToast(t('trainingStopped'), 'warning');
+                    stopPolling();
+                    checkActiveTraining();
+                    loadTrainingHistory();
+                }
+            } catch (error) {
+                console.error('Failed to stop training:', error);
+                showToast(t('error') + ': ' + error.message, 'error');
+            }
+        }
+
+        // ============================================
+        // Training History
+        // ============================================
+        async function loadTrainingHistory() {
+            const container = document.getElementById('training-history-body');
+            try {
+                const runs = await API.get('/api/training');
+                if (!runs || runs.length === 0) {
+                    container.innerHTML = `
+                        <div class="empty-state">
+                            <i class="fas fa-inbox"></i>
+                            <p data-i18n="noTrainingYet">${t('noTrainingYet')}</p>
+                        </div>
+                    `;
+                    return;
+                }
+
+                const html = runs.map(run => {
+                    const mapVal = run.metrics && run.metrics.map50_95 != null
+                        ? formatMetric(run.metrics.map50_95)
+                        : '-';
+                    const dsName = run.dataset_name || ('#' + (run.dataset_id || '-'));
+
+                    return `
+                        <div class="history-item">
+                            <div class="history-info">
+                                <div class="history-name">${run.model_name || run.model_type || '-'}</div>
+                                <div class="history-meta">
+                                    <span>${dsName}</span>
+                                    <span class="meta-dot">&middot;</span>
+                                    <span>${run.epochs || 0} ${t('epochsLabel')}</span>
+                                    <span class="meta-dot">&middot;</span>
+                                    <span>${formatDate(run.created_at)}</span>
+                                </div>
+                            </div>
+                            <div class="history-right">
+                                <div class="history-metric">
+                                    <span class="metric-label-sm">mAP</span>
+                                    <span class="metric-value-sm">${mapVal}</span>
+                                </div>
+                                <div class="history-badge">
+                                    ${statusBadge(run.status)}
+                                </div>
+                                <button class="btn-icon-sm btn-delete-run" onclick="deleteTrainingRun('${run.id}')" title="${t('delete')}">
+                                    <i class="fas fa-trash-alt"></i>
+                                </button>
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+
+                container.innerHTML = `<div class="history-list">${html}</div>`;
+            } catch (error) {
+                console.error('Failed to load training history:', error);
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <i class="fas fa-exclamation-circle"></i>
+                        <p>${t('error')}: ${error.message}</p>
+                    </div>
+                `;
+            }
+        }
+
+        async function deleteTrainingRun(runId) {
+            if (!await confirmAction(t('deleteRunConfirm'))) return;
+            try {
+                await API.delete('/api/training/' + runId);
+                showToast(t('deleted'), 'success');
+                loadTrainingHistory();
+            } catch (error) {
+                console.error('Failed to delete training run:', error);
+                showToast(t('error') + ': ' + error.message, 'error');
+            }
+        }
+
+        // ============================================
+        // Training Curves (Chart.js)
+        // ============================================
+        async function loadTrainingCurves(runId) {
+            try {
+                const data = await API.get('/api/training/' + runId + '/logs');
+                const logs = data.logs || data || [];
+                renderTrainingCurves(logs);
+            } catch (error) {
+                console.error('Failed to load training curves:', error);
+            }
+        }
+
+        function renderTrainingCurves(logs) {
+            const card = document.getElementById('training-curves-card');
+            const canvas = document.getElementById('training-curves-chart');
+
+            if (!logs || !Array.isArray(logs) || logs.length === 0) {
+                card.style.display = 'none';
+                return;
+            }
+
+            card.style.display = '';
+
+            if (curvesChart) {
+                curvesChart.destroy();
+                curvesChart = null;
+            }
+
+            // Extract epoch labels and metric arrays
+            const labels = logs.map((l, i) => l.epoch != null ? l.epoch : (i + 1));
+
+            // Detect available keys dynamically (skip 'epoch')
+            const metricKeys = Object.keys(logs[0] || {}).filter(k => k !== 'epoch');
+
+            // Color palette for curves
+            const colors = [
+                { border: '#3b82f6', bg: 'rgba(59,130,246,0.1)' },
+                { border: '#ef4444', bg: 'rgba(239,68,68,0.1)' },
+                { border: '#22c55e', bg: 'rgba(34,197,94,0.1)' },
+                { border: '#f59e0b', bg: 'rgba(245,158,11,0.1)' },
+                { border: '#8b5cf6', bg: 'rgba(139,92,246,0.1)' },
+                { border: '#06b6d4', bg: 'rgba(6,182,212,0.1)' },
+                { border: '#ec4899', bg: 'rgba(236,72,153,0.1)' },
+                { border: '#14b8a6', bg: 'rgba(20,184,166,0.1)' },
+            ];
+
+            const datasets = metricKeys.map((key, idx) => {
+                const color = colors[idx % colors.length];
+                return {
+                    label: key,
+                    data: logs.map(l => l[key]),
+                    borderColor: color.border,
+                    backgroundColor: color.bg,
+                    borderWidth: 2,
+                    pointRadius: 1,
+                    pointHoverRadius: 4,
+                    tension: 0.3,
+                    fill: false,
+                };
+            });
+
+            curvesChart = new Chart(canvas, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: datasets,
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: {
+                        mode: 'index',
+                        intersect: false,
+                    },
+                    plugins: {
+                        legend: {
+                            position: 'top',
+                            labels: {
+                                padding: 16,
+                                usePointStyle: true,
+                                pointStyle: 'circle',
+                                font: { size: 12 }
+                            }
+                        },
+                        tooltip: {
+                            backgroundColor: 'rgba(15,23,42,0.9)',
+                            titleFont: { size: 13 },
+                            bodyFont: { size: 12 },
+                            padding: 12,
+                            cornerRadius: 8,
+                        }
+                    },
+                    scales: {
+                        x: {
+                            title: {
+                                display: true,
+                                text: 'Epoch',
+                                font: { size: 13, weight: '600' },
+                                color: '#64748b',
+                            },
+                            grid: { color: 'rgba(226,232,240,0.5)' },
+                            ticks: { font: { size: 11 }, color: '#94a3b8' },
+                        },
+                        y: {
+                            title: {
+                                display: true,
+                                text: 'Loss / Metric',
+                                font: { size: 13, weight: '600' },
+                                color: '#64748b',
+                            },
+                            grid: { color: 'rgba(226,232,240,0.5)' },
+                            ticks: { font: { size: 11 }, color: '#94a3b8' },
+                            beginAtZero: false,
+                        }
+                    }
+                }
+            });
+        }
+    </script>
+
+    <style>
+        /* ============================================
+           Training Page Layout
+           ============================================ */
+        .training-layout {
+            display: grid;
+            grid-template-columns: 420px 1fr;
+            gap: 24px;
+            align-items: start;
+        }
+
+        .training-left {
+            min-width: 0;
+        }
+
+        .training-right {
+            min-width: 0;
+            display: flex;
+            flex-direction: column;
+            gap: 24px;
+        }
+
+        /* ============================================
+           Hyperparameters Section
+           ============================================ */
+        .hyperparams-divider {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin: 24px 0 18px 0;
+            padding-bottom: 10px;
+            border-bottom: 1px solid var(--border);
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--text);
+        }
+
+        .hyperparams-divider i {
+            color: var(--primary);
+            font-size: 14px;
+        }
+
+        .hyperparams-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 14px;
+        }
+
+        .hyperparams-grid .form-group.full-width {
+            grid-column: 1 / -1;
+        }
+
+        .hyperparams-grid .form-group {
+            margin-bottom: 0;
+        }
+
+        .label-hint {
+            display: block;
+            font-size: 11px;
+            font-weight: 400;
+            color: var(--text-secondary);
+            margin-top: 1px;
+        }
+
+        /* ============================================
+           Start Training Button
+           ============================================ */
+        .btn-start-train {
+            width: 100%;
+            margin-top: 24px;
+            padding: 14px 24px;
+            font-size: 15px;
+            font-weight: 600;
+            justify-content: center;
+        }
+
+        /* ============================================
+           Active Training Card
+           ============================================ */
+        .active-model-name {
+            font-size: 18px;
+            font-weight: 700;
+            color: var(--text);
+            margin-bottom: 8px;
+        }
+
+        .active-status {
+            margin-bottom: 18px;
+        }
+
+        .active-progress-section {
+            margin-bottom: 16px;
+        }
+
+        .active-progress-bar {
+            width: 100%;
+            height: 10px;
+            background: var(--bg);
+            border-radius: 5px;
+            overflow: hidden;
+        }
+
+        .active-progress-bar .progress-fill {
+            height: 100%;
+            background: var(--primary-gradient);
+            border-radius: 5px;
+            transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+        }
+
+        .active-progress-bar .progress-fill::after {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent);
+            animation: shimmer 1.5s infinite;
+        }
+
+        .active-progress-info {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 8px;
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--text-secondary);
+        }
+
+        /* ============================================
+           Active Metrics
+           ============================================ */
+        .active-metrics {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 12px;
+            padding-top: 18px;
+            border-top: 1px solid var(--border);
+        }
+
+        .metric-box {
+            text-align: center;
+            padding: 12px 8px;
+            background: var(--bg);
+            border-radius: var(--radius);
+        }
+
+        .metric-box .metric-value {
+            font-size: 18px;
+            font-weight: 800;
+            color: var(--primary);
+            letter-spacing: -0.3px;
+        }
+
+        .metric-box .metric-label {
+            font-size: 11px;
+            font-weight: 600;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
+            margin-top: 4px;
+        }
+
+        /* ============================================
+           Training History
+           ============================================ */
+        .history-list {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .history-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 14px 16px;
+            border-radius: var(--radius);
+            border: 1px solid var(--border);
+            transition: var(--transition);
+        }
+
+        .history-item:hover {
+            border-color: var(--primary);
+            background: rgba(59, 130, 246, 0.02);
+        }
+
+        .history-info {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .history-name {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--text);
+            margin-bottom: 4px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .history-meta {
+            font-size: 12px;
+            color: var(--text-secondary);
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            flex-wrap: wrap;
+        }
+
+        .meta-dot {
+            opacity: 0.5;
+        }
+
+        .history-right {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            flex-shrink: 0;
+            margin-left: 12px;
+        }
+
+        .history-metric {
+            text-align: right;
+        }
+
+        .metric-label-sm {
+            display: block;
+            font-size: 10px;
+            font-weight: 600;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
+        }
+
+        .metric-value-sm {
+            font-size: 14px;
+            font-weight: 700;
+            color: var(--primary);
+        }
+
+        .history-badge {
+            flex-shrink: 0;
+        }
+
+        .btn-icon-sm {
+            width: 30px;
+            height: 30px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: none;
+            background: none;
+            cursor: pointer;
+            border-radius: 6px;
+            color: var(--text-secondary);
+            font-size: 13px;
+            transition: var(--transition);
+        }
+
+        .btn-icon-sm:hover {
+            background: var(--danger-light);
+            color: var(--danger);
+        }
+
+        /* ============================================
+           Responsive
+           ============================================ */
+        @media (max-width: 1200px) {
+            .training-layout {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .hyperparams-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .active-metrics {
+                grid-template-columns: repeat(2, 1fr);
+            }
+
+            .history-item {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 10px;
+            }
+
+            .history-right {
+                margin-left: 0;
+                width: 100%;
+                justify-content: space-between;
+            }
+        }
+    </style>
+</body>
+</html>

@@ -1,0 +1,995 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title data-i18n="datasetsTitle">数据集管理</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <div id="sidebar-container"></div>
+
+    <div class="main-content">
+        <div class="page-header">
+            <div>
+                <h1 data-i18n="datasetsTitle">数据集管理</h1>
+                <div class="subtitle" data-i18n="datasetsSub">创建和管理训练数据集</div>
+            </div>
+            <button class="btn btn-primary" onclick="openCreateModal()">
+                <i class="fas fa-plus"></i>
+                <span data-i18n="createDataset">新建数据集</span>
+            </button>
+        </div>
+
+        <div class="page-body">
+            <div id="datasets-container" class="grid-3">
+                <div class="empty-state" style="grid-column: 1/-1;">
+                    <i class="fas fa-spinner fa-spin"></i>
+                    <p data-i18n="loading">加载中...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Create Dataset Modal -->
+    <div id="create-modal" class="modal-overlay">
+        <div class="modal">
+            <div class="modal-header">
+                <h3 data-i18n="createDataset">新建数据集</h3>
+                <button class="modal-close" onclick="closeModal('create-modal')">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label data-i18n="datasetName">数据集名称</label>
+                    <input type="text" id="dataset-name" class="form-control" data-i18n-ph="datasetNamePh" placeholder="例如：helmet_detection">
+                </div>
+                <div class="form-group">
+                    <label data-i18n="description">描述</label>
+                    <textarea id="dataset-desc" class="form-control" data-i18n-ph="descPh" placeholder="可选描述信息..."></textarea>
+                </div>
+                <div class="form-group">
+                    <label data-i18n="classesLabel">类别标签（每行一个）</label>
+                    <textarea id="dataset-classes" class="form-control" data-i18n-ph="classesPh" placeholder="helmet&#10;safety_vest&#10;person" rows="5"></textarea>
+                    <div class="form-hint" data-i18n="classesHint">每行输入一个类别名称，顺序决定类别 ID</div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-outline" onclick="closeModal('create-modal')">
+                    <span data-i18n="cancel">取消</span>
+                </button>
+                <button class="btn btn-primary" onclick="createDataset()">
+                    <span data-i18n="create">创建</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Edit Dataset Modal -->
+    <div id="edit-modal" class="modal-overlay">
+        <div class="modal">
+            <div class="modal-header">
+                <h3><i class="fas fa-edit" style="margin-right: 8px; color: var(--primary);"></i>编辑数据集</h3>
+                <button class="modal-close" onclick="closeModal('edit-modal')">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>数据集名称</label>
+                    <input type="text" id="edit-dataset-name" class="form-control">
+                </div>
+                <div class="form-group">
+                    <label>描述</label>
+                    <textarea id="edit-dataset-desc" class="form-control" rows="2"></textarea>
+                </div>
+                <div class="form-group">
+                    <label>类别标签（每行一个）</label>
+                    <textarea id="edit-dataset-classes" class="form-control" rows="6"></textarea>
+                    <div class="form-hint">每行一个类别名称，顺序决定类别 ID。新增类别请追加在末尾，避免打乱已有标注。</div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-outline" onclick="closeModal('edit-modal')">取消</button>
+                <button class="btn btn-primary" onclick="saveEditDataset()">
+                    <i class="fas fa-save"></i> 保存
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- View Dataset Modal -->
+    <div id="view-modal" class="modal-overlay">
+        <div class="modal" style="max-width: 1000px;">
+            <div class="modal-header">
+                <h3 id="view-dataset-title">数据集详情</h3>
+                <button class="modal-close" onclick="closeModal('view-modal')">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div id="view-dataset-info" style="margin-bottom: 16px;"></div>
+                <!-- Image management toolbar -->
+                <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 14px; padding: 10px 14px; background: var(--bg-secondary); border-radius: var(--radius); flex-wrap: wrap;">
+                    <label style="display: flex; align-items: center; gap: 6px; font-size: 13px; cursor: pointer;">
+                        <input type="checkbox" id="select-all-checkbox" onchange="toggleSelectAll(this.checked)">
+                        全选
+                    </label>
+                    <span id="selected-count" style="font-size: 13px; color: var(--text-secondary);">已选 0 张</span>
+                    <div style="flex: 1;"></div>
+                    <button class="btn btn-sm btn-outline" onclick="selectAnnotated()" title="选中所有已标注的图片">
+                        <i class="fas fa-check-circle"></i> 选已标注
+                    </button>
+                    <button class="btn btn-sm btn-outline" onclick="selectUnannotated()" title="选中所有未标注的图片">
+                        <i class="fas fa-circle"></i> 选未标注
+                    </button>
+                    <button class="btn btn-sm btn-danger" id="batch-delete-btn" onclick="batchDeleteImages()" disabled>
+                        <i class="fas fa-trash"></i> 删除选中
+                    </button>
+                </div>
+                <div id="view-dataset-images" class="grid-4" style="max-height: 500px; overflow-y: auto;">
+                    <div class="empty-state" style="grid-column: 1/-1;">
+                        <i class="fas fa-spinner fa-spin"></i>
+                        <p data-i18n="loading">加载中...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Upload Images Modal -->
+    <div id="upload-modal" class="modal-overlay">
+        <div class="modal">
+            <div class="modal-header">
+                <h3 data-i18n="uploadImages">上传图片</h3>
+                <button class="modal-close" onclick="closeModal('upload-modal')">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="upload-area" id="upload-drop-zone">
+                    <i class="fas fa-cloud-upload-alt"></i>
+                    <p data-i18n="uploadImages">上传图片</p>
+                    <div class="upload-hint" data-i18n="uploadProgress">上传进度</div>
+                </div>
+                <div class="upload-buttons">
+                    <label class="btn btn-outline" style="cursor: pointer;">
+                        <i class="fas fa-file-image"></i>
+                        <span data-i18n="uploadFiles">选择图片文件</span>
+                        <input type="file" id="file-input" accept="image/*" multiple style="display: none;" onchange="handleFileSelect(event)">
+                    </label>
+                    <label class="btn btn-outline" style="cursor: pointer;">
+                        <i class="fas fa-folder-open"></i>
+                        <span data-i18n="uploadFolder">选择文件夹</span>
+                        <input type="file" id="folder-input" webkitdirectory directory multiple style="display: none;" onchange="handleFolderSelect(event)">
+                    </label>
+                </div>
+                <div id="upload-file-list" style="margin-top: 16px; max-height: 200px; overflow-y: auto;"></div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-outline" onclick="closeModal('upload-modal')">
+                    <span data-i18n="cancel">取消</span>
+                </button>
+                <button class="btn btn-primary" id="upload-btn" onclick="uploadFiles()" disabled>
+                    <i class="fas fa-upload"></i>
+                    <span data-i18n="upload">上传</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Video Import Modal -->
+    <div id="video-modal" class="modal-overlay">
+        <div class="modal">
+            <div class="modal-header">
+                <h3><i class="fas fa-video" style="margin-right: 8px; color: var(--success);"></i>从视频导入</h3>
+                <button class="modal-close" onclick="closeModal('video-modal')">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="upload-area" id="video-drop-zone" style="border-color: var(--success);">
+                    <i class="fas fa-film" style="font-size: 2rem; color: var(--success);"></i>
+                    <p>选择或拖拽视频文件</p>
+                    <div class="upload-hint">支持 MP4, AVI, MOV, MKV, WMV, FLV, WebM</div>
+                </div>
+                <div style="margin-top: 12px;">
+                    <label class="btn btn-outline" style="cursor: pointer;">
+                        <i class="fas fa-file-video"></i> 选择视频文件
+                        <input type="file" id="video-file-input" accept="video/*" style="display: none;" onchange="handleVideoSelect(event)">
+                    </label>
+                </div>
+                <div id="video-file-info" style="margin-top: 12px; font-size: 13px; color: var(--text-secondary);"></div>
+
+                <div style="margin-top: 20px; display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px;">
+                    <div class="form-group">
+                        <label>截帧间隔（秒）</label>
+                        <input type="number" id="video-interval" class="form-control" value="1" min="0.1" step="0.1">
+                        <div class="form-hint">每隔 N 秒截取一帧</div>
+                    </div>
+                    <div class="form-group">
+                        <label>JPEG 质量</label>
+                        <input type="number" id="video-quality" class="form-control" value="95" min="1" max="100">
+                        <div class="form-hint">1-100，越高越清晰</div>
+                    </div>
+                    <div class="form-group">
+                        <label>最大帧数</label>
+                        <input type="number" id="video-max-frames" class="form-control" value="500" min="1" max="5000">
+                        <div class="form-hint">安全上限，防止过多</div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-outline" onclick="closeModal('video-modal')">取消</button>
+                <button class="btn btn-success" id="video-import-btn" onclick="importVideo()" disabled>
+                    <i class="fas fa-magic"></i> 开始导入
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Version Management Modal -->
+    <div id="version-modal" class="modal-overlay">
+        <div class="modal" style="max-width: 700px;">
+            <div class="modal-header">
+                <h3><i class="fas fa-code-branch" style="margin-right: 8px; color: var(--info);"></i>版本管理</h3>
+                <button class="modal-close" onclick="closeModal('version-modal')">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div style="display: flex; gap: 12px; margin-bottom: 20px; align-items: flex-end;">
+                    <div class="form-group" style="flex: 1; margin-bottom: 0;">
+                        <label>版本名称</label>
+                        <input type="text" id="version-name" class="form-control" placeholder="例如：第一次标注完成">
+                    </div>
+                    <div class="form-group" style="flex: 1; margin-bottom: 0;">
+                        <label>备注</label>
+                        <input type="text" id="version-note" class="form-control" placeholder="可选备注...">
+                    </div>
+                    <button class="btn btn-primary" onclick="createVersion()" style="white-space: nowrap;">
+                        <i class="fas fa-plus"></i> 创建版本
+                    </button>
+                </div>
+                <div id="version-list" style="max-height: 400px; overflow-y: auto;">
+                    <div class="empty-state">
+                        <i class="fas fa-spinner fa-spin"></i>
+                        <p>加载中...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/js/app.js"></script>
+    <script>
+        // Initialize sidebar
+        document.getElementById('sidebar-container').innerHTML = getSidebarHTML('datasets');
+
+        let datasets = [];
+        let currentDatasetId = null;
+        let selectedFiles = [];
+
+        // Load datasets
+        async function loadDatasets() {
+            try {
+                datasets = await API.get('/api/datasets');
+                renderDatasets();
+            } catch (error) {
+                console.error('Failed to load datasets:', error);
+                showToast(t('error') + ': ' + error.message, 'error');
+            }
+        }
+
+        // Render datasets grid
+        function renderDatasets() {
+            const container = document.getElementById('datasets-container');
+
+            if (!datasets || datasets.length === 0) {
+                container.innerHTML = `
+                    <div class="empty-state" style="grid-column: 1/-1;">
+                        <i class="fas fa-inbox"></i>
+                        <h3 data-i18n="noDatasets">${t('noDatasets')}</h3>
+                        <p data-i18n="noDatasetsDesc">${t('noDatasetsDesc')}</p>
+                    </div>
+                `;
+                return;
+            }
+
+            const html = datasets.map(ds => {
+                const total = ds.total_images || 0;
+                const annotated = ds.annotated_images || 0;
+                const progress = total > 0 ? Math.round((annotated / total) * 100) : 0;
+                const classes = ds.classes || [];
+
+                return `
+                    <div class="card">
+                        <div class="card-body">
+                            <h3 style="font-size: 16px; font-weight: 600; margin-bottom: 8px;">${ds.name}</h3>
+                            <p style="font-size: 13px; color: var(--text-secondary); margin-bottom: 16px; min-height: 40px;">
+                                ${ds.description || t('noDesc')}
+                            </p>
+                            
+                            <div style="display: flex; gap: 16px; margin-bottom: 16px; font-size: 13px;">
+                                <div>
+                                    <div style="color: var(--text-secondary); font-size: 11px;" data-i18n="images">${t('images')}</div>
+                                    <div style="font-weight: 600; font-size: 16px;">${total}</div>
+                                </div>
+                                <div>
+                                    <div style="color: var(--text-secondary); font-size: 11px;" data-i18n="annotated">${t('annotated')}</div>
+                                    <div style="font-weight: 600; font-size: 16px;">${annotated}</div>
+                                </div>
+                                <div>
+                                    <div style="color: var(--text-secondary); font-size: 11px;" data-i18n="classes">${t('classes')}</div>
+                                    <div style="font-weight: 600; font-size: 16px;">${classes.length}</div>
+                                </div>
+                            </div>
+
+                            <div style="margin-bottom: 16px;">
+                                <div class="progress-bar">
+                                    <div class="progress-fill" style="width: ${progress}%;"></div>
+                                </div>
+                                <div style="text-align: right; font-size: 12px; color: var(--text-secondary); margin-top: 4px;">${progress}%</div>
+                            </div>
+
+                            ${classes.length > 0 ? `
+                                <div style="display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 16px;">
+                                    ${classes.slice(0, 5).map(cls => `
+                                        <span class="badge badge-info">${cls}</span>
+                                    `).join('')}
+                                    ${classes.length > 5 ? `<span class="badge badge-info">+${classes.length - 5}</span>` : ''}
+                                </div>
+                            ` : `
+                                <div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 16px;" data-i18n="noClasses">${t('noClasses')}</div>
+                            `}
+
+                            <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                                <button class="btn btn-sm btn-outline" onclick="viewDataset('${ds.id}')">
+                                    <i class="fas fa-eye"></i>
+                                    <span data-i18n="view">${t('view')}</span>
+                                </button>
+                                <button class="btn btn-sm btn-outline" onclick="openEditModal('${ds.id}')">
+                                    <i class="fas fa-edit"></i> 编辑
+                                </button>
+                                <button class="btn btn-sm btn-primary" onclick="openUploadModal('${ds.id}')">
+                                    <i class="fas fa-upload"></i>
+                                    <span data-i18n="upload">${t('upload')}</span>
+                                </button>
+                                <button class="btn btn-sm btn-success" onclick="openVideoModal('${ds.id}')">
+                                    <i class="fas fa-video"></i> 视频导入
+                                </button>
+                                <button class="btn btn-sm btn-info" onclick="openVersionModal('${ds.id}')">
+                                    <i class="fas fa-code-branch"></i> 版本(${ds.version_count || 0})
+                                </button>
+                                <button class="btn btn-sm btn-warning" onclick="exportDataset('${ds.id}')">
+                                    <i class="fas fa-download"></i>
+                                    <span data-i18n="exportYolo">${t('exportYolo')}</span>
+                                </button>
+                                <button class="btn btn-sm btn-danger" onclick="deleteDataset('${ds.id}', '${ds.name}')">
+                                    <i class="fas fa-trash"></i>
+                                    <span data-i18n="delete">${t('delete')}</span>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            container.innerHTML = html;
+        }
+
+        // Open create modal
+        function openCreateModal() {
+            document.getElementById('dataset-name').value = '';
+            document.getElementById('dataset-desc').value = '';
+            document.getElementById('dataset-classes').value = '';
+            openModal('create-modal');
+        }
+
+        // Create dataset
+        async function createDataset() {
+            const name = document.getElementById('dataset-name').value.trim();
+            const description = document.getElementById('dataset-desc').value.trim();
+            const classesText = document.getElementById('dataset-classes').value.trim();
+
+            if (!name) {
+                showToast(t('datasetName') + '不能为空', 'warning');
+                return;
+            }
+
+            const classes = classesText ? classesText.split('\n').map(c => c.trim()).filter(c => c) : [];
+
+            try {
+                await API.post('/api/datasets', { name, description, classes });
+                showToast(t('success'), 'success');
+                closeModal('create-modal');
+                loadDatasets();
+            } catch (error) {
+                console.error('Failed to create dataset:', error);
+                showToast(t('error') + ': ' + error.message, 'error');
+            }
+        }
+
+        // Open edit modal
+        function openEditModal(id) {
+            currentDatasetId = id;
+            const dataset = datasets.find(d => d.id === id);
+            if (!dataset) return;
+
+            document.getElementById('edit-dataset-name').value = dataset.name || '';
+            document.getElementById('edit-dataset-desc').value = dataset.description || '';
+            document.getElementById('edit-dataset-classes').value = (dataset.classes || []).join('\n');
+            openModal('edit-modal');
+        }
+
+        // Save edited dataset
+        async function saveEditDataset() {
+            const name = document.getElementById('edit-dataset-name').value.trim();
+            const description = document.getElementById('edit-dataset-desc').value.trim();
+            const classesText = document.getElementById('edit-dataset-classes').value.trim();
+
+            if (!name) {
+                showToast('数据集名称不能为空', 'warning');
+                return;
+            }
+
+            const classes = classesText ? classesText.split('\n').map(c => c.trim()).filter(c => c) : [];
+
+            try {
+                await API.put(`/api/datasets/${currentDatasetId}`, { name, description, classes });
+                showToast('保存成功', 'success');
+                closeModal('edit-modal');
+                loadDatasets();
+            } catch (error) {
+                console.error('Failed to update dataset:', error);
+                showToast('保存失败: ' + error.message, 'error');
+            }
+        }
+
+        // View dataset detail
+        async function viewDataset(id) {
+            currentDatasetId = id;
+            const dataset = datasets.find(d => d.id === id);
+            if (!dataset) return;
+
+            document.getElementById('view-dataset-title').textContent = dataset.name;
+            
+            const info = document.getElementById('view-dataset-info');
+            info.innerHTML = `
+                <p style="color: var(--text-secondary); margin-bottom: 12px;">
+                    ${dataset.description || t('noDesc')}
+                </p>
+                <div style="display: flex; gap: 24px; font-size: 13px;">
+                    <div>
+                        <span style="color: var(--text-secondary);" data-i18n="images">${t('images')}:</span>
+                        <span style="font-weight: 600;">${dataset.total_images || 0}</span>
+                    </div>
+                    <div>
+                        <span style="color: var(--text-secondary);" data-i18n="annotated">${t('annotated')}:</span>
+                        <span style="font-weight: 600;">${dataset.annotated_images || 0}</span>
+                    </div>
+                    <div>
+                        <span style="color: var(--text-secondary);" data-i18n="classes">${t('classes')}:</span>
+                        <span style="font-weight: 600;">${(dataset.classes || []).length}</span>
+                    </div>
+                </div>
+            `;
+
+            openModal('view-modal');
+
+            // Load images
+            try {
+                const images = await API.get(`/api/datasets/${id}/images`);
+                renderImages(images);
+            } catch (error) {
+                console.error('Failed to load images:', error);
+                document.getElementById('view-dataset-images').innerHTML = `
+                    <div class="empty-state" style="grid-column: 1/-1;">
+                        <i class="fas fa-exclamation-circle"></i>
+                        <p>${t('error')}: ${error.message}</p>
+                    </div>
+                `;
+            }
+        }
+
+        // Render images grid
+        let currentImages = [];  // store loaded image list
+        let selectedImages = new Set();
+
+        function renderImages(images) {
+            const container = document.getElementById('view-dataset-images');
+            currentImages = images || [];
+            selectedImages.clear();
+            updateSelectionUI();
+
+            if (!images || images.length === 0) {
+                container.innerHTML = `
+                    <div class="empty-state" style="grid-column: 1/-1;">
+                        <i class="fas fa-images"></i>
+                        <p>暂无图片</p>
+                    </div>
+                `;
+                return;
+            }
+
+            const html = images.map((img, idx) => `
+                <div class="img-select-item" data-idx="${idx}" data-filename="${img.filename}" data-annotated="${img.has_annotation}"
+                     style="aspect-ratio: 1; border-radius: var(--radius); overflow: hidden; border: 2px solid var(--border); position: relative; cursor: pointer; transition: border-color 0.15s;"
+                     onclick="toggleImageSelect(${idx})">
+                    <img src="${img.path || img.url}" alt="${img.filename}" style="width: 100%; height: 100%; object-fit: cover;" loading="lazy">
+                    <div style="position: absolute; top: 6px; left: 6px;">
+                        <input type="checkbox" class="img-checkbox" data-idx="${idx}" ${selectedImages.has(idx) ? 'checked' : ''}
+                               onclick="event.stopPropagation(); toggleImageSelect(${idx})"
+                               style="width: 16px; height: 16px; cursor: pointer;">
+                    </div>
+                    ${img.has_annotation ? '<div style="position: absolute; top: 6px; right: 6px; width: 10px; height: 10px; border-radius: 50%; background: var(--success); border: 2px solid #fff;" title="已标注"></div>' : ''}
+                    <div style="position: absolute; bottom: 0; left: 0; right: 0; padding: 4px 6px; background: rgba(0,0,0,0.6); font-size: 10px; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${img.filename}</div>
+                </div>
+            `).join('');
+
+            container.innerHTML = html;
+        }
+
+        function toggleImageSelect(idx) {
+            if (selectedImages.has(idx)) {
+                selectedImages.delete(idx);
+            } else {
+                selectedImages.add(idx);
+            }
+            // Update checkbox and border visually
+            const item = document.querySelector(`.img-select-item[data-idx="${idx}"]`);
+            if (item) {
+                const cb = item.querySelector('.img-checkbox');
+                if (cb) cb.checked = selectedImages.has(idx);
+                item.style.borderColor = selectedImages.has(idx) ? 'var(--primary)' : 'var(--border)';
+            }
+            updateSelectionUI();
+        }
+
+        function toggleSelectAll(checked) {
+            selectedImages.clear();
+            if (checked) {
+                currentImages.forEach((_, idx) => selectedImages.add(idx));
+            }
+            document.querySelectorAll('.img-select-item').forEach(item => {
+                const idx = parseInt(item.dataset.idx);
+                const cb = item.querySelector('.img-checkbox');
+                if (cb) cb.checked = selectedImages.has(idx);
+                item.style.borderColor = selectedImages.has(idx) ? 'var(--primary)' : 'var(--border)';
+            });
+            updateSelectionUI();
+        }
+
+        function selectAnnotated() {
+            selectedImages.clear();
+            currentImages.forEach((img, idx) => {
+                if (img.has_annotation) selectedImages.add(idx);
+            });
+            refreshSelectionVisuals();
+        }
+
+        function selectUnannotated() {
+            selectedImages.clear();
+            currentImages.forEach((img, idx) => {
+                if (!img.has_annotation) selectedImages.add(idx);
+            });
+            refreshSelectionVisuals();
+        }
+
+        function refreshSelectionVisuals() {
+            document.querySelectorAll('.img-select-item').forEach(item => {
+                const idx = parseInt(item.dataset.idx);
+                const cb = item.querySelector('.img-checkbox');
+                if (cb) cb.checked = selectedImages.has(idx);
+                item.style.borderColor = selectedImages.has(idx) ? 'var(--primary)' : 'var(--border)';
+            });
+            document.getElementById('select-all-checkbox').checked = selectedImages.size === currentImages.length && currentImages.length > 0;
+            updateSelectionUI();
+        }
+
+        function updateSelectionUI() {
+            const count = selectedImages.size;
+            document.getElementById('selected-count').textContent = `已选 ${count} 张`;
+            document.getElementById('batch-delete-btn').disabled = count === 0;
+        }
+
+        async function batchDeleteImages() {
+            if (selectedImages.size === 0) return;
+
+            const filenames = Array.from(selectedImages).map(idx => currentImages[idx].filename);
+            if (!await confirmAction(`确定删除选中的 ${filenames.length} 张图片及其标注？此操作不可恢复。`)) return;
+
+            try {
+                const resp = await fetch(`/api/datasets/${currentDatasetId}/images/batch-delete`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ filenames }),
+                });
+                if (!resp.ok) {
+                    const err = await resp.json();
+                    throw new Error(err.detail || 'Batch delete failed');
+                }
+                const result = await resp.json();
+                showToast(`已删除 ${result.deleted} 张图片`, 'success');
+                // Reload images in modal
+                const images = await API.get(`/api/datasets/${currentDatasetId}/images`);
+                renderImages(images);
+                loadDatasets(); // refresh card counts
+            } catch (error) {
+                showToast('批量删除失败: ' + error.message, 'error');
+            }
+        }
+
+        // Open upload modal
+        function openUploadModal(id) {
+            currentDatasetId = id;
+            selectedFiles = [];
+            document.getElementById('file-input').value = '';
+            document.getElementById('folder-input').value = '';
+            document.getElementById('upload-file-list').innerHTML = '';
+            document.getElementById('upload-btn').disabled = true;
+            openModal('upload-modal');
+        }
+
+        // Handle file select
+        function handleFileSelect(event) {
+            const files = Array.from(event.target.files);
+            selectedFiles = files;
+            updateFileList();
+        }
+
+        // Handle folder select
+        function handleFolderSelect(event) {
+            const files = Array.from(event.target.files).filter(f => f.type.startsWith('image/'));
+            selectedFiles = files;
+            updateFileList();
+        }
+
+        // Update file list display
+        function updateFileList() {
+            const list = document.getElementById('upload-file-list');
+            const btn = document.getElementById('upload-btn');
+
+            if (selectedFiles.length === 0) {
+                list.innerHTML = '';
+                btn.disabled = true;
+                return;
+            }
+
+            btn.disabled = false;
+            const html = selectedFiles.slice(0, 10).map(f => `
+                <div style="padding: 8px; border-bottom: 1px solid var(--border); font-size: 13px;">
+                    <i class="fas fa-file-image" style="color: var(--primary); margin-right: 8px;"></i>
+                    ${f.name}
+                    <span style="color: var(--text-secondary); margin-left: 8px;">(${formatSize(f.size)})</span>
+                </div>
+            `).join('');
+
+            const more = selectedFiles.length > 10 ? `<div style="padding: 8px; font-size: 12px; color: var(--text-secondary);">... 还有 ${selectedFiles.length - 10} 个文件</div>` : '';
+            list.innerHTML = html + more;
+        }
+
+        // Upload files
+        async function uploadFiles() {
+            if (selectedFiles.length === 0 || !currentDatasetId) return;
+
+            const formData = new FormData();
+            selectedFiles.forEach(file => {
+                formData.append('files', file);
+            });
+
+            showProgressOverlay(t('uploading'), `${t('uploadProgress')}: 0%`);
+
+            try {
+                await API.upload(`/api/datasets/${currentDatasetId}/images`, formData, (percent) => {
+                    updateProgressOverlay(percent, `${t('uploadProgress')}: ${percent}%`);
+                });
+
+                hideProgressOverlay();
+                showToast(t('success'), 'success');
+                closeModal('upload-modal');
+                loadDatasets();
+            } catch (error) {
+                hideProgressOverlay();
+                console.error('Failed to upload files:', error);
+                showToast(t('error') + ': ' + error.message, 'error');
+            }
+        }
+
+        // Delete dataset
+        async function deleteDataset(id, name) {
+            const message = t('deleteDatasetConfirm').replace('{name}', name);
+            if (!await confirmAction(message)) return;
+
+            try {
+                await API.delete(`/api/datasets/${id}`);
+                showToast(t('deleted'), 'success');
+                loadDatasets();
+            } catch (error) {
+                console.error('Failed to delete dataset:', error);
+                showToast(t('error') + ': ' + error.message, 'error');
+            }
+        }
+
+        // Export dataset as YOLO format
+        async function exportDataset(id) {
+            try {
+                window.open(`/api/datasets/${id}/export-yolo`, '_blank');
+                showToast(t('success'), 'success');
+            } catch (error) {
+                console.error('Failed to export dataset:', error);
+                showToast(t('error') + ': ' + error.message, 'error');
+            }
+        }
+
+        // Drag and drop support
+        const dropZone = document.getElementById('upload-drop-zone');
+        
+        dropZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropZone.classList.add('dragover');
+        });
+
+        dropZone.addEventListener('dragleave', () => {
+            dropZone.classList.remove('dragover');
+        });
+
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('dragover');
+            
+            const files = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('image/'));
+            selectedFiles = files;
+            updateFileList();
+        });
+
+        // ============================================
+        // Video Import
+        // ============================================
+        let selectedVideoFile = null;
+
+        function openVideoModal(id) {
+            currentDatasetId = id;
+            selectedVideoFile = null;
+            document.getElementById('video-file-input').value = '';
+            document.getElementById('video-file-info').innerHTML = '';
+            document.getElementById('video-import-btn').disabled = true;
+            document.getElementById('video-interval').value = '1';
+            document.getElementById('video-quality').value = '95';
+            document.getElementById('video-max-frames').value = '500';
+            openModal('video-modal');
+        }
+
+        function handleVideoSelect(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            selectedVideoFile = file;
+            document.getElementById('video-file-info').innerHTML = `
+                <div style="padding: 10px; background: var(--bg-secondary); border-radius: var(--radius); display: flex; align-items: center; gap: 10px;">
+                    <i class="fas fa-file-video" style="font-size: 1.5rem; color: var(--success);"></i>
+                    <div>
+                        <div style="font-weight: 600; color: var(--text-primary);">${file.name}</div>
+                        <div style="font-size: 12px;">${formatSize(file.size)}</div>
+                    </div>
+                </div>
+            `;
+            document.getElementById('video-import-btn').disabled = false;
+        }
+
+        // Video drag and drop
+        const videoDropZone = document.getElementById('video-drop-zone');
+        videoDropZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            videoDropZone.classList.add('dragover');
+        });
+        videoDropZone.addEventListener('dragleave', () => {
+            videoDropZone.classList.remove('dragover');
+        });
+        videoDropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            videoDropZone.classList.remove('dragover');
+            const files = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('video/'));
+            if (files.length > 0) {
+                selectedVideoFile = files[0];
+                document.getElementById('video-file-info').innerHTML = `
+                    <div style="padding: 10px; background: var(--bg-secondary); border-radius: var(--radius); display: flex; align-items: center; gap: 10px;">
+                        <i class="fas fa-file-video" style="font-size: 1.5rem; color: var(--success);"></i>
+                        <div>
+                            <div style="font-weight: 600; color: var(--text-primary);">${selectedVideoFile.name}</div>
+                            <div style="font-size: 12px;">${formatSize(selectedVideoFile.size)}</div>
+                        </div>
+                    </div>
+                `;
+                document.getElementById('video-import-btn').disabled = false;
+            }
+        });
+
+        async function importVideo() {
+            if (!selectedVideoFile || !currentDatasetId) return;
+
+            const interval = parseFloat(document.getElementById('video-interval').value) || 1;
+            const quality = parseInt(document.getElementById('video-quality').value) || 95;
+            const maxFrames = parseInt(document.getElementById('video-max-frames').value) || 500;
+
+            const formData = new FormData();
+            formData.append('file', selectedVideoFile);
+            formData.append('interval_sec', interval.toString());
+            formData.append('jpeg_quality', quality.toString());
+            formData.append('max_frames', maxFrames.toString());
+
+            showProgressOverlay('正在导入视频', '正在上传视频并截取帧...');
+
+            try {
+                const resp = await fetch(`/api/datasets/${currentDatasetId}/import-video`, {
+                    method: 'POST',
+                    body: formData,
+                });
+
+                if (!resp.ok) {
+                    const err = await resp.json();
+                    throw new Error(err.detail || 'Import failed');
+                }
+
+                const result = await resp.json();
+                hideProgressOverlay();
+                showToast(`成功从视频截取 ${result.frames_extracted} 张图片（视频时长 ${result.video_duration_sec}s, ${result.video_fps}fps）`, 'success');
+                closeModal('video-modal');
+                loadDatasets();
+            } catch (error) {
+                hideProgressOverlay();
+                console.error('Video import failed:', error);
+                showToast('视频导入失败: ' + error.message, 'error');
+            }
+        }
+
+        // ============================================
+        // Version Management
+        // ============================================
+
+        function openVersionModal(id) {
+            currentDatasetId = id;
+            document.getElementById('version-name').value = '';
+            document.getElementById('version-note').value = '';
+            openModal('version-modal');
+            loadVersions();
+        }
+
+        async function loadVersions() {
+            const container = document.getElementById('version-list');
+            try {
+                const versions = await API.get(`/api/datasets/${currentDatasetId}/versions`);
+                if (!versions || versions.length === 0) {
+                    container.innerHTML = `
+                        <div class="empty-state">
+                            <i class="fas fa-code-branch"></i>
+                            <p>暂无版本记录</p>
+                            <p style="font-size: 12px; color: var(--text-secondary);">创建版本可保存当前数据集快照，方便后续恢复</p>
+                        </div>
+                    `;
+                    return;
+                }
+
+                container.innerHTML = versions.map(v => `
+                    <div style="padding: 14px; border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center;">
+                        <div>
+                            <div style="font-weight: 600; font-size: 14px;">
+                                <i class="fas fa-tag" style="color: var(--info); margin-right: 6px;"></i>${v.name}
+                            </div>
+                            <div style="font-size: 12px; color: var(--text-secondary); margin-top: 4px;">
+                                ${v.note ? v.note + ' · ' : ''}${v.image_count} 张图片 · ${v.label_count} 个标注
+                            </div>
+                            <div style="font-size: 11px; color: var(--text-secondary); margin-top: 2px;">
+                                ${new Date(v.created_at).toLocaleString('zh-CN')}
+                            </div>
+                        </div>
+                        <div style="display: flex; gap: 8px;">
+                            <button class="btn btn-sm btn-outline" onclick="restoreVersion('${v.id}', '${v.name}')" title="恢复此版本">
+                                <i class="fas fa-undo"></i> 恢复
+                            </button>
+                            <button class="btn btn-sm btn-danger" onclick="deleteVersion('${v.id}', '${v.name}')" title="删除此版本">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </div>
+                    </div>
+                `).join('');
+            } catch (error) {
+                container.innerHTML = `<div class="empty-state"><i class="fas fa-exclamation-circle"></i><p>加载失败: ${error.message}</p></div>`;
+            }
+        }
+
+        async function createVersion() {
+            const name = document.getElementById('version-name').value.trim();
+            const note = document.getElementById('version-note').value.trim();
+
+            const formData = new FormData();
+            formData.append('name', name);
+            formData.append('note', note);
+
+            try {
+                const resp = await fetch(`/api/datasets/${currentDatasetId}/versions`, {
+                    method: 'POST',
+                    body: formData,
+                });
+                if (!resp.ok) {
+                    const err = await resp.json();
+                    throw new Error(err.detail || 'Create version failed');
+                }
+                const result = await resp.json();
+                showToast(`版本 "${result.version.name}" 创建成功（${result.version.image_count} 张图片）`, 'success');
+                document.getElementById('version-name').value = '';
+                document.getElementById('version-note').value = '';
+                loadVersions();
+                loadDatasets(); // refresh version count on cards
+            } catch (error) {
+                showToast('创建版本失败: ' + error.message, 'error');
+            }
+        }
+
+        async function restoreVersion(versionId, versionName) {
+            if (!await confirmAction(`确定恢复到版本 "${versionName}"？当前数据集的图片和标注将被替换。`)) return;
+
+            try {
+                const resp = await fetch(`/api/datasets/${currentDatasetId}/versions/${versionId}/restore`, {
+                    method: 'POST',
+                });
+                if (!resp.ok) {
+                    const err = await resp.json();
+                    throw new Error(err.detail || 'Restore failed');
+                }
+                const result = await resp.json();
+                showToast(`已恢复版本 "${versionName}"（${result.restored_images} 张图片, ${result.restored_labels} 个标注）`, 'success');
+                loadDatasets();
+            } catch (error) {
+                showToast('恢复失败: ' + error.message, 'error');
+            }
+        }
+
+        async function deleteVersion(versionId, versionName) {
+            if (!await confirmAction(`确定删除版本 "${versionName}"？此操作不可恢复。`)) return;
+
+            try {
+                await API.delete(`/api/datasets/${currentDatasetId}/versions/${versionId}`);
+                showToast(`版本 "${versionName}" 已删除`, 'success');
+                loadVersions();
+                loadDatasets();
+            } catch (error) {
+                showToast('删除失败: ' + error.message, 'error');
+            }
+        }
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            loadDatasets();
+        });
+    </script>
+
+    <style>
+        .card {
+            transition: var(--transition);
+        }
+
+        .card:hover {
+            transform: translateY(-4px);
+            box-shadow: var(--shadow-lg);
+        }
+
+        @media (max-width: 1200px) {
+            .grid-3 {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+
+        @media (max-width: 768px) {
+            .grid-3 {
+                grid-template-columns: 1fr;
+            }
+
+            .grid-4 {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+    </style>
+</body>
+</html>

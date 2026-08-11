@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+
+# Virtual environment
+.venv/
+venv/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# Large model weights (only exclude very large fine-tuned models)
+# Pretrained base models (*.pt < 10MB) are tracked
+
+# Data & runs (user-generated content)
+data/
+runs/
+
+# OS files
+Thumbs.db
+.DS_Store
+
+# QoderWork
+.qoderworkcn/

@@ -1,0 +1,663 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YOLO Training Platform</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+</head>
+<body>
+    <div id="sidebar-container"></div>
+
+    <div class="main-content">
+        <div class="page-header">
+            <div>
+                <h1 data-i18n="dashboardTitle">仪表盘</h1>
+                <div class="subtitle" data-i18n="dashboardSub">项目总览与快速操作</div>
+            </div>
+            <button class="btn btn-outline" onclick="loadDashboard()">
+                <i class="fas fa-sync-alt"></i>
+                <span data-i18n="refresh">刷新</span>
+            </button>
+        </div>
+
+        <div class="page-body">
+            <!-- Stats Grid -->
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-icon blue">
+                        <i class="fas fa-database"></i>
+                    </div>
+                    <div class="stat-info">
+                        <h4 data-i18n="totalDatasets">数据集</h4>
+                        <div class="stat-value" id="stat-datasets">0</div>
+                    </div>
+                </div>
+
+                <div class="stat-card">
+                    <div class="stat-icon green">
+                        <i class="fas fa-images"></i>
+                    </div>
+                    <div class="stat-info">
+                        <h4 data-i18n="totalImages">图片总数</h4>
+                        <div class="stat-value" id="stat-images">0</div>
+                    </div>
+                </div>
+
+                <div class="stat-card">
+                    <div class="stat-icon yellow">
+                        <i class="fas fa-check-circle"></i>
+                    </div>
+                    <div class="stat-info">
+                        <h4 data-i18n="totalAnnotated">已标注</h4>
+                        <div class="stat-value" id="stat-annotated">0</div>
+                    </div>
+                </div>
+
+                <div class="stat-card">
+                    <div class="stat-icon red">
+                        <i class="fas fa-cube"></i>
+                    </div>
+                    <div class="stat-info">
+                        <h4 data-i18n="totalModels">模型数量</h4>
+                        <div class="stat-value" id="stat-models">0</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Main Grid -->
+            <div class="dashboard-grid">
+                <!-- Left Column -->
+                <div class="dashboard-left">
+                    <!-- Recent Training -->
+                    <div class="card">
+                        <div class="card-header">
+                            <h3 data-i18n="recentTraining">最近训练</h3>
+                            <a href="/train" class="btn btn-sm btn-text" data-i18n="viewAll">查看全部</a>
+                        </div>
+                        <div class="card-body">
+                            <div id="recent-training-list">
+                                <div class="empty-state">
+                                    <i class="fas fa-spinner fa-spin"></i>
+                                    <p data-i18n="loading">加载中...</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Dataset Table -->
+                    <div class="card" style="margin-top: 24px;">
+                        <div class="card-header">
+                            <h3 data-i18n="datasetOverview">数据集概览</h3>
+                            <a href="/datasets" class="btn btn-sm btn-text" data-i18n="viewAll">查看全部</a>
+                        </div>
+                        <div class="card-body" style="padding: 0;">
+                            <div id="dataset-table-container">
+                                <div class="empty-state">
+                                    <i class="fas fa-spinner fa-spin"></i>
+                                    <p data-i18n="loading">加载中...</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Right Column -->
+                <div class="dashboard-right">
+                    <!-- Quick Actions -->
+                    <div class="card">
+                        <div class="card-header">
+                            <h3 data-i18n="quickActions">快速操作</h3>
+                        </div>
+                        <div class="card-body">
+                            <div class="quick-actions">
+                                <a href="/datasets" class="quick-action-btn">
+                                    <div class="quick-action-icon" style="background: var(--primary-light); color: var(--primary);">
+                                        <i class="fas fa-plus"></i>
+                                    </div>
+                                    <span data-i18n="newDataset">新建数据集</span>
+                                </a>
+                                <a href="/train" class="quick-action-btn">
+                                    <div class="quick-action-icon" style="background: var(--success-light); color: var(--success);">
+                                        <i class="fas fa-play"></i>
+                                    </div>
+                                    <span data-i18n="startTraining">开始训练</span>
+                                </a>
+                                <a href="/models" class="quick-action-btn">
+                                    <div class="quick-action-icon" style="background: var(--warning-light); color: var(--warning);">
+                                        <i class="fas fa-cube"></i>
+                                    </div>
+                                    <span data-i18n="manageModels">管理模型</span>
+                                </a>
+                                <a href="/evaluate" class="quick-action-btn">
+                                    <div class="quick-action-icon" style="background: var(--info-light); color: var(--info);">
+                                        <i class="fas fa-chart-bar"></i>
+                                    </div>
+                                    <span data-i18n="evalModel">评估模型</span>
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Dataset Chart -->
+                    <div class="card" style="margin-top: 24px;">
+                        <div class="card-header">
+                            <h3 data-i18n="datasetOverview">数据集概览</h3>
+                        </div>
+                        <div class="card-body">
+                            <div id="dataset-chart-container" style="position: relative; height: 280px;">
+                                <canvas id="dataset-chart"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/js/app.js"></script>
+    <script>
+        // Initialize sidebar
+        document.getElementById('sidebar-container').innerHTML = getSidebarHTML('dashboard');
+
+        let datasetChart = null;
+
+        // Load dashboard data
+        async function loadDashboard() {
+            try {
+                const data = await API.get('/api/dashboard');
+                updateStats(data);
+                updateRecentTraining(data.recent_training || []);
+                updateDatasetChart(data.datasets || []);
+            } catch (error) {
+                console.error('Failed to load dashboard:', error);
+                showToast(t('error') + ': ' + error.message, 'error');
+            }
+        }
+
+        // Update statistics
+        function updateStats(data) {
+            document.getElementById('stat-datasets').textContent = formatNumber(data.total_datasets || 0);
+            document.getElementById('stat-images').textContent = formatNumber(data.total_images || 0);
+            document.getElementById('stat-annotated').textContent = formatNumber(data.total_annotated || 0);
+            document.getElementById('stat-models').textContent = formatNumber(data.total_models || 0);
+        }
+
+        // Update recent training list
+        function updateRecentTraining(trainingRuns) {
+            const container = document.getElementById('recent-training-list');
+
+            if (!trainingRuns || trainingRuns.length === 0) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <i class="fas fa-inbox"></i>
+                        <p data-i18n="noTrainingRuns">暂无训练记录</p>
+                    </div>
+                `;
+                return;
+            }
+
+            const html = trainingRuns.slice(0, 5).map(run => `
+                <div class="training-item">
+                    <div class="training-info">
+                        <div class="training-name">${run.model_name || run.model_type}</div>
+                        <div class="training-meta">
+                            <span>${run.dataset_name}</span>
+                            <span>•</span>
+                            <span>${run.epochs || 0} ${t('epochsLabel')}</span>
+                            <span>•</span>
+                            <span>${formatDate(run.created_at)}</span>
+                        </div>
+                    </div>
+                    <div class="training-status">
+                        ${statusBadge(run.status)}
+                    </div>
+                </div>
+            `).join('');
+
+            container.innerHTML = `<div class="training-list">${html}</div>`;
+        }
+
+        // Update dataset chart
+        function updateDatasetChart(datasets) {
+            const ctx = document.getElementById('dataset-chart');
+            if (!ctx) return;
+
+            if (datasetChart) {
+                datasetChart.destroy();
+            }
+
+            if (!datasets || datasets.length === 0) {
+                document.getElementById('dataset-chart-container').innerHTML = `
+                    <div class="empty-state" style="height: 100%; display: flex; align-items: center; justify-content: center;">
+                        <div>
+                            <i class="fas fa-chart-pie" style="font-size: 48px; opacity: 0.3;"></i>
+                            <p style="margin-top: 12px; color: var(--text-secondary);" data-i18n="noDatasets">暂无数据集</p>
+                        </div>
+                    </div>
+                `;
+                return;
+            }
+
+            const labels = datasets.map(d => d.name);
+            const annotatedData = datasets.map(d => d.annotated_images || 0);
+            const unannotatedData = datasets.map(d => (d.total_images || 0) - (d.annotated_images || 0));
+
+            datasetChart = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        {
+                            label: t('totalAnnotated'),
+                            data: annotatedData,
+                            backgroundColor: 'rgba(59, 130, 246, 0.8)',
+                            borderColor: '#fff',
+                            borderWidth: 2
+                        },
+                        {
+                            label: t('totalImages'),
+                            data: unannotatedData,
+                            backgroundColor: 'rgba(203, 213, 225, 0.6)',
+                            borderColor: '#fff',
+                            borderWidth: 2
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            labels: {
+                                padding: 15,
+                                font: {
+                                    size: 12
+                                }
+                            }
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    const label = context.label || '';
+                                    const value = context.parsed || 0;
+                                    return `${label}: ${value} ${t('images')}`;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Load dataset table
+        async function loadDatasetTable() {
+            try {
+                const datasets = await API.get('/api/datasets');
+                updateDatasetTable(datasets);
+            } catch (error) {
+                console.error('Failed to load datasets:', error);
+                document.getElementById('dataset-table-container').innerHTML = `
+                    <div class="empty-state">
+                        <i class="fas fa-exclamation-circle"></i>
+                        <p>${t('error')}: ${error.message}</p>
+                    </div>
+                `;
+            }
+        }
+
+        // Update dataset table
+        function updateDatasetTable(datasets) {
+            const container = document.getElementById('dataset-table-container');
+
+            if (!datasets || datasets.length === 0) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <i class="fas fa-inbox"></i>
+                        <p data-i18n="noDatasets">暂无数据集</p>
+                    </div>
+                `;
+                return;
+            }
+
+            const html = `
+                <table class="dataset-table">
+                    <thead>
+                        <tr>
+                            <th data-i18n="datasetName">数据集名称</th>
+                            <th data-i18n="totalImages">图片总数</th>
+                            <th data-i18n="totalAnnotated">已标注</th>
+                            <th data-i18n="classes">类别</th>
+                            <th style="width: 200px;">Progress</th>
+                            <th style="width: 100px;">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${datasets.map(ds => {
+                            const total = ds.total_images || 0;
+                            const annotated = ds.annotated_images || 0;
+                            const progress = total > 0 ? Math.round((annotated / total) * 100) : 0;
+                            const classes = ds.classes || [];
+
+                            return `
+                                <tr>
+                                    <td>
+                                        <div class="dataset-name">${ds.name}</div>
+                                        ${ds.description ? `<div class="dataset-desc">${ds.description}</div>` : ''}
+                                    </td>
+                                    <td>${formatNumber(total)}</td>
+                                    <td>${formatNumber(annotated)}</td>
+                                    <td>
+                                        ${classes.length > 0
+                                            ? `<span class="badge badge-info">${classes.length}</span>`
+                                            : '<span style="color: var(--text-secondary);">-</span>'
+                                        }
+                                    </td>
+                                    <td>
+                                        <div class="progress-bar-container">
+                                            <div class="progress-bar">
+                                                <div class="progress-fill" style="width: ${progress}%;"></div>
+                                            </div>
+                                            <span class="progress-text">${progress}%</span>
+                                        </div>
+                                    </td>
+                                    <td>
+                                        <a href="/annotate/${ds.id}" class="btn btn-sm btn-primary">
+                                            <i class="fas fa-tag"></i>
+                                            <span data-i18n="annotate">标注</span>
+                                        </a>
+                                    </td>
+                                </tr>
+                            `;
+                        }).join('')}
+                    </tbody>
+                </table>
+            `;
+
+            container.innerHTML = html;
+        }
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            loadDashboard();
+            loadDatasetTable();
+        });
+    </script>
+
+    <style>
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: 1fr 380px;
+            gap: 24px;
+        }
+
+        .dashboard-left {
+            min-width: 0;
+        }
+
+        .dashboard-right {
+            min-width: 0;
+        }
+
+        .quick-actions {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+        }
+
+        .quick-action-btn {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 10px;
+            padding: 20px 16px;
+            border-radius: var(--radius);
+            border: 1px solid var(--border);
+            background: var(--card-bg);
+            transition: var(--transition);
+            cursor: pointer;
+            text-align: center;
+        }
+
+        .quick-action-btn:hover {
+            border-color: var(--primary);
+            box-shadow: var(--shadow-md);
+            transform: translateY(-2px);
+        }
+
+        .quick-action-icon {
+            width: 48px;
+            height: 48px;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+        }
+
+        .quick-action-btn span {
+            font-size: 13px;
+            font-weight: 500;
+            color: var(--text);
+        }
+
+        .training-list {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .training-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 14px;
+            border-radius: var(--radius);
+            border: 1px solid var(--border);
+            transition: var(--transition);
+        }
+
+        .training-item:hover {
+            border-color: var(--primary);
+            background: rgba(59, 130, 246, 0.02);
+        }
+
+        .training-info {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .training-name {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--text);
+            margin-bottom: 4px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .training-meta {
+            font-size: 12px;
+            color: var(--text-secondary);
+            display: flex;
+            gap: 6px;
+            align-items: center;
+        }
+
+        .training-status {
+            flex-shrink: 0;
+            margin-left: 12px;
+        }
+
+        .dataset-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .dataset-table thead {
+            background: var(--bg);
+            border-bottom: 1px solid var(--border);
+        }
+
+        .dataset-table th {
+            padding: 12px 16px;
+            text-align: left;
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .dataset-table td {
+            padding: 16px;
+            border-bottom: 1px solid var(--border);
+            font-size: 14px;
+        }
+
+        .dataset-table tbody tr {
+            transition: var(--transition);
+        }
+
+        .dataset-table tbody tr:hover {
+            background: rgba(59, 130, 246, 0.02);
+        }
+
+        .dataset-table tbody tr:last-child td {
+            border-bottom: none;
+        }
+
+        .dataset-name {
+            font-weight: 600;
+            color: var(--text);
+            margin-bottom: 2px;
+        }
+
+        .dataset-desc {
+            font-size: 12px;
+            color: var(--text-secondary);
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            max-width: 300px;
+        }
+
+        .progress-bar-container {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .progress-bar {
+            flex: 1;
+            height: 8px;
+            background: var(--bg);
+            border-radius: 4px;
+            overflow: hidden;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: var(--primary-gradient);
+            border-radius: 4px;
+            transition: width 0.3s ease;
+        }
+
+        .progress-text {
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--text-secondary);
+            min-width: 36px;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 48px 24px;
+            color: var(--text-secondary);
+        }
+
+        .empty-state i {
+            font-size: 48px;
+            opacity: 0.3;
+            margin-bottom: 12px;
+        }
+
+        .empty-state p {
+            font-size: 14px;
+            margin: 0;
+        }
+
+        .btn-outline {
+            background: transparent;
+            border: 1px solid var(--border);
+            color: var(--text);
+            padding: 8px 16px;
+            border-radius: var(--radius);
+            font-size: 13px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: var(--transition);
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .btn-outline:hover {
+            border-color: var(--primary);
+            color: var(--primary);
+            background: rgba(59, 130, 246, 0.05);
+        }
+
+        .btn-sm {
+            padding: 6px 12px;
+            font-size: 12px;
+            border-radius: 8px;
+        }
+
+        .btn-text {
+            background: transparent;
+            border: none;
+            color: var(--primary);
+            padding: 4px 8px;
+            font-size: 13px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: var(--transition);
+        }
+
+        .btn-text:hover {
+            color: var(--primary-hover);
+        }
+
+        .btn-primary {
+            background: var(--primary);
+            color: #fff;
+            border: none;
+            padding: 8px 16px;
+            border-radius: var(--radius);
+            font-size: 13px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: var(--transition);
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .btn-primary:hover {
+            background: var(--primary-hover);
+            box-shadow: var(--shadow-md);
+        }
+
+        @media (max-width: 1200px) {
+            .dashboard-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</body>
+</html>
